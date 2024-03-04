@@ -1,98 +1,128 @@
-# SPDX-FileCopyrightText: 2014 Tony DiCola for Adafruit Industries
-# SPDX-License-Identifier: MIT
+#!/usr/bin/python3
 
-# This example is for use on (Linux) computers that are using CPython with
-# Adafruit Blinka to support CircuitPython libraries. CircuitPython does
-# not support PIL/pillow (python imaging library)!
-
-import math
 import time
-from board import SCL, SDA
+import threading
+import board
 import busio
+from digitalio import DigitalInOut, Direction, Pull
 from PIL import Image, ImageDraw, ImageFont
 import adafruit_ssd1306
 
-# Create the I2C interface.
-i2c = busio.I2C(SCL, SDA)
 
-# Create the SSD1306 OLED class.
-# The first two parameters are the pixel width and pixel height.
-# Change these to the right size for your display!
-disp = adafruit_ssd1306.SSD1306_I2C(128, 32, i2c)
+from menue import Menu
+from os_stats import *
 
-# Note you can change the I2C address, or add a reset pin:
-# disp = adafruit_ssd1306.SSD1306_I2C(128, 32, i2c, addr=0x3c, reset=reset_pin)
+class Base:
+    def __init__(self):
+        # Init Display
+        self.i2c = busio.I2C(board.SCL, board.SDA)
+        self.display = adafruit_ssd1306.SSD1306_I2C(128, 64, self.i2c)
 
-# Get display width and height.
-width = disp.width
-height = disp.height
+        # Init Buttons
+        self.button_pins = [board.D5, board.D6, board.D27, board.D23, board.D17, board.D22, board.D4]
+        self.button_names = ["return", "select", "left", "right", "up", "down", "middle"]
 
-# Clear display.
-disp.fill(0)
-disp.show()
+        button_return = DigitalInOut(board.D5)
+        button_select = DigitalInOut(board.D6)
+        button_left = DigitalInOut(board.D27)
+        button_right = DigitalInOut(board.D23)
+        button_up = DigitalInOut(board.D17)
+        button_down = DigitalInOut(board.D22)
+        button_middle = DigitalInOut(board.D4)
 
-# Create image buffer.
-# Make sure to create image with mode '1' for 1-bit color.
-image = Image.new("1", (width, height))
+        self.buttons = [button_return, button_select, button_left, button_right, button_up, button_down, button_middle]
 
-# Load default font.
-font = ImageFont.load_default()
+        for button in self.buttons:
+            button.direction = Direction.INPUT
+            button.pull = Pull.UP
 
-# Alternatively load a TTF font.  Make sure the .ttf font file is in the
-# same directory as this python script!
-# Some nice fonts to try: http://www.dafont.com/bitmap.php
-# font = ImageFont.truetype('Minecraftia.ttf', 8)
+        self.selected_item = [0]
 
-# Create drawing object.
-draw = ImageDraw.Draw(image)
+        self.sys_stats = None
 
-# Define text and get total width.
-text = (
-    "SSD1306 ORGANIC LED DISPLAY. THIS IS AN OLD SCHOOL DEMO SCROLLER!!"
-    + "GREETZ TO: LADYADA & THE ADAFRUIT CREW, TRIXTER, FUTURE CREW, AND FARBRAUSCH"
-)
-maxwidth, unused = draw.textsize(text, font=font)
+    def home(self):
+        # Create an image with the stats
+        image = Image.new("1", (128, 64))
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.load_default()
 
-# Set animation and sine wave parameters.
-amplitude = height / 4
-offset = height / 2 - 4
-velocity = -2
-startpos = width
+        self.sys_stats = update_sys_stats()
 
-# Animate text moving in sine wave.
-print("Press Ctrl-C to quit.")
-pos = startpos
-while True:
-    # Clear image buffer by drawing a black filled box.
-    draw.rectangle((0, 0, width, height), outline=0, fill=0)
-    # Enumerate characters and draw them offset vertically based on a sine wave.
-    x = pos
-    for i, c in enumerate(text):
-        # Stop drawing if off the right side of screen.
-        if x > width:
-            break
-        # Calculate width but skip drawing if off the left side of screen.
-        if x < -10:
-            char_width, char_height = draw.textsize(c, font=font)
-            x += char_width
-            continue
-        # Calculate offset from sine wave.
-        y = offset + math.floor(amplitude * math.sin(x / float(width) * 2.0 * math.pi))
-        # Draw text.
-        draw.text((x, y), c, font=font, fill=255)
-        # Increment x position based on chacacter width.
-        char_width, char_height = draw.textsize(c, font=font)
-        x += char_width
+        if self.sys_stats is not None:
+            cpu_usage = self.sys_stats["cpu_usage"]
+            ram_usage = self.sys_stats["ram_usage"]
+            cpu_temp = self.sys_stats["cpu_temp"]
+        else:
+            cpu_usage = "N/A"
+            ram_usage = "N/A"
+            cpu_temp = "N/A"
 
-    # Draw the image buffer.
-    disp.image(image)
-    disp.show()
+        draw.text((0, 0), f"CPU Temp: {cpu_temp} °C", font=font, fill=255)
+        draw.text((0, 10), f"CPU Usage: {cpu_usage} %", font=font, fill=255)
+        draw.text((0, 20), f"RAM Usage: {ram_usage} %", font=font, fill=255)
 
-    # Move position for next frame.
-    pos += velocity
-    # Start over if text has scrolled completely off left side of screen.
-    if pos < -maxwidth:
-        pos = startpos
+        # Clock
+        current_time = time.strftime("%H:%M:%S")
+        draw.text((0, 30), f"Time: {current_time}", font=font, fill=255)
 
-    # Pause briefly before drawing next frame.
-    time.sleep(0.05)
+        return image
+
+    def empty(self):
+        image = Image.new("1", (128, 64))
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.load_default()
+        return image
+
+    def nav(self, button_name):
+        # Check button presses
+        if button_name == "return":
+            # Return
+            self.selected_item.pop()
+        elif button_name == "select":
+            # Select
+            return self.selected_item
+        elif button_name == "left":
+            # Left
+            self.selected_item.pop()
+        elif button_name == "right":
+            # Right
+            self.selected_item.append(1)
+        elif button_name == "up":
+            # Up
+            current = self.selected_item.pop()
+            self.selected_item.append(current + 1)
+        elif button_name == "down":
+            # Down
+            current = self.selected_item.pop()
+            self.selected_item.append(current - 1)
+        elif button_name == "middle":
+            self.selected_item.clear()
+        else:
+            return
+
+def main():
+    base = Base()
+
+    # Main Loop
+    while True:
+        # Menue Navigation
+        for button_name, button in zip(base.button_names, base.buttons):
+            if (button.value == False):
+                base.nav(button_name)
+
+        print(base.selected_item)
+
+        if base.selected_item == [0]:
+            # Display home screen
+            image = base.home()
+        elif base.selected_item == [0, 1]:
+            # Display empty screen
+            image = base.empty()
+
+        base.display.image(image)
+        base.display.show()
+        print("Updated Display")
+        time.sleep(1)
+
+if __name__ == "__main__":
+    main()

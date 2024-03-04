@@ -1,4 +1,5 @@
 board
 adafruit-blinka
-Pillow
 adafruit-circuitpython-ssd1306
+Pillow
+psutil
