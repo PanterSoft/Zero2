@@ -16,7 +16,7 @@ export OVERCLOCK_PROFILE="modest"  # Overclocking Profile: "none", "modest", "hi
 
 # Repository Configuration
 INSTALL_DIR="/opt/zero2_controller"
-REPO_URL="git@github.com:PanterSoft/Zero2.git"
+REPO_URL="https://github.com/PanterSoft/Zero2.git"
 BRANCH="main"
 
 # ==============================================================================
