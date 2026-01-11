@@ -41,7 +41,6 @@ fi
 
 # 1. Update System & Install Dependencies
 echo "Installing system dependencies..."
-apt-get update
 
 # Check which packages need to be installed
 PACKAGES_TO_INSTALL=()
@@ -53,6 +52,8 @@ done
 
 if [ ${#PACKAGES_TO_INSTALL[@]} -gt 0 ]; then
     echo "Installing missing packages: ${PACKAGES_TO_INSTALL[*]}"
+    echo "Running apt-get update..."
+    apt-get update
     apt-get install -y "${PACKAGES_TO_INSTALL[@]}"
 else
     echo "All system dependencies are already installed."
@@ -154,8 +155,8 @@ EOF
 
     # Unmask and enable services
     systemctl unmask hostapd
-    systemctl enable hostapd
-    systemctl enable dnsmasq
+    #systemctl enable hostapd
+    #systemctl enable dnsmasq
 fi
 
 # 5. Setup Python Environment
@@ -186,11 +187,11 @@ echo "Installing Systemd Services..."
 cp systemd/zero2-controller.service /etc/systemd/system/
 if [ "$ENABLE_SSH_BT" = true ]; then
     cp systemd/bt-nap.service /etc/systemd/system/
-    systemctl enable bt-nap.service
+    #systemctl enable bt-nap.service
 fi
 
 systemctl daemon-reload
-systemctl enable zero2-controller.service
+#systemctl enable zero2-controller.service
 
 # 8. Apply Overclocking
 if [ "$OVERCLOCK_PROFILE" != "none" ]; then
