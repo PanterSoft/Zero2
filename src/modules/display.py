@@ -173,10 +173,6 @@ class DisplayManager:
 
     def _get_wifi_status(self):
         """Check if WiFi is enabled/connected."""
-        config = read_config()
-        if not config.get('ENABLE_WIFI_HOTSPOT', False):
-            return None
-
         try:
             # Check if WiFi interface exists and is up
             result = subprocess.run(
@@ -195,9 +191,34 @@ class DisplayManager:
                 )
                 if result.returncode == 0 and result.stdout.strip():
                     return 'connected'
+                # Also check using iwconfig as fallback
+                result = subprocess.run(
+                    ['iwconfig', 'wlan0'],
+                    capture_output=True,
+                    text=True,
+                    timeout=1
+                )
+                if result.returncode == 0 and 'ESSID:' in result.stdout and 'off/any' not in result.stdout:
+                    # Extract ESSID to check if connected
+                    import re
+                    essid_match = re.search(r'ESSID:"([^"]+)"', result.stdout)
+                    if essid_match and essid_match.group(1):
+                        return 'connected'
                 return 'enabled'
             return 'disabled'
-        except (FileNotFoundError, subprocess.TimeoutExpired):
+        except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+            # If WiFi interface check fails, try to see if wlan0 exists at all
+            try:
+                result = subprocess.run(
+                    ['ip', 'link', 'show', 'wlan0'],
+                    capture_output=True,
+                    text=True,
+                    timeout=1
+                )
+                if result.returncode == 0:
+                    return 'enabled'
+            except:
+                pass
             return None
 
     def _get_bluetooth_status(self):
@@ -300,8 +321,6 @@ class DisplayManager:
         # Draw separator line below menu bar
         self.draw.line([0, self.menu_bar_height, self.width, self.menu_bar_height], fill=255)
 
-        x = 2  # Start position for icons
-
         # Update status cache if needed
         current_time = time.time()
         if current_time - self.status_cache_time > self.status_cache_interval:
@@ -315,28 +334,38 @@ class DisplayManager:
             self.status_cache['bluetooth'] = self._get_bluetooth_status()
             self.status_cache_time = current_time
 
-        # Battery icon (leftmost) - only show if battery monitoring is enabled
+        # Calculate total width needed for all icons (right-aligned)
+        icon_widths = []
+
+        # Bluetooth icon width
+        bt_status = self.status_cache.get('bluetooth')
+        if bt_status is not None:
+            icon_widths.append(('bluetooth', 7))
+
+        # WiFi icon width
+        wifi_status = self.status_cache.get('wifi')
+        if wifi_status is not None:
+            icon_widths.append(('wifi', 9))
+
+        # Battery icon width (if enabled)
         enable_low_bat = get_config('ENABLE_LOW_BAT', False)
         if enable_low_bat:
             battery_status = self.status_cache.get('battery')
-            self._draw_battery_icon(x, 0, battery_status)
-            # Move right: battery icon (15px) + spacing + text (up to 20px) = ~40px
-            x += 40
-            # Ensure we don't go beyond screen width
-            if x >= self.width - 20:
-                x = self.width - 20
+            # Battery icon + text = ~40px
+            icon_widths.append(('battery', 40))
 
-        # WiFi icon
-        wifi_status = self.status_cache.get('wifi')
-        if wifi_status is not None and x + 9 < self.width:
-            self._draw_wifi_icon(x, 0, wifi_status)
-            x += 9  # Smaller spacing for WiFi icon
+        # Start from right side, work backwards
+        x = self.width - 2  # Start at right edge with 2px margin
 
-        # Bluetooth icon
-        bt_status = self.status_cache.get('bluetooth')
-        if bt_status is not None and x + 7 < self.width:
-            self._draw_bluetooth_icon(x, 0, bt_status)
-            x += 7  # Smaller spacing for Bluetooth icon
+        # Draw icons from right to left
+        for icon_name, icon_width in icon_widths:
+            x -= icon_width
+            if icon_name == 'bluetooth':
+                self._draw_bluetooth_icon(x, 0, bt_status)
+            elif icon_name == 'wifi':
+                self._draw_wifi_icon(x, 0, wifi_status)
+            elif icon_name == 'battery':
+                self._draw_battery_icon(x, 0, battery_status)
 
     def show_warning(self, message, timeout=None):
         """
