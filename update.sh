@@ -47,6 +47,9 @@ cp systemd/bt-nap.service /etc/systemd/system/
 systemctl daemon-reload
 echo "  Services reloaded"
 
+# Track if I2C was changed (for reboot hint)
+I2C_CHANGED=false
+
 # Check and enable I2C if display is enabled
 if [ -f "config/zero2.conf" ]; then
     ENABLE_DISPLAY=$(grep "^ENABLE_DISPLAY=" config/zero2.conf | cut -d'=' -f2 | tr -d ' ' | tr '[:upper:]' '[:lower:]')
@@ -63,17 +66,20 @@ if [ -f "config/zero2.conf" ]; then
         elif grep -qE "^[[:space:]]*dtparam=i2c_arm=off" /boot/config.txt; then
             sed -i 's/^[[:space:]]*dtparam=i2c_arm=off/dtparam=i2c_arm=on/' /boot/config.txt
             I2C_JUST_ENABLED=true
+            I2C_CHANGED=true
             echo "  Changed dtparam=i2c_arm=off to dtparam=i2c_arm=on"
         elif grep -qE "^[[:space:]]*#.*dtparam=i2c_arm=" /boot/config.txt; then
             # I2C line is commented out (with optional whitespace before #), uncomment and enable
             # Handle both "#dtparam=i2c_arm=off" and "# dtparam=i2c_arm=off" patterns
             sed -i -E 's/^([[:space:]]*)#([[:space:]]*)dtparam=i2c_arm=.*/\1dtparam=i2c_arm=on/' /boot/config.txt
             I2C_JUST_ENABLED=true
+            I2C_CHANGED=true
             echo "  Uncommented and enabled I2C in /boot/config.txt"
         else
             # I2C is not enabled yet, add it
             echo "dtparam=i2c_arm=on" >> /boot/config.txt
             I2C_JUST_ENABLED=true
+            I2C_CHANGED=true
             echo "  Added dtparam=i2c_arm=on to /boot/config.txt"
         fi
 
@@ -103,5 +109,9 @@ echo "To enable newly updated services:"
 echo "  sudo systemctl enable zero2-controller.service"
 echo "  sudo systemctl enable bt-nap.service"
 echo "  sudo systemctl restart zero2-controller.service"
-echo ""
-echo "Note: If I2C was just enabled, a reboot may be required: sudo reboot"
+
+# Only show reboot hint if I2C was actually changed
+if [ "$I2C_CHANGED" = true ]; then
+    echo ""
+    echo "Note: I2C was just enabled. A reboot may be required: sudo reboot"
+fi
