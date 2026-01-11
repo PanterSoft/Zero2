@@ -196,11 +196,19 @@ if [ -f "config/zero2.conf" ]; then
             # No message if packages are already installed (silent success)
         fi
 
+        # Ensure i2c-dev module is loaded at boot (required for I2C to work)
+        if [ "$I2C_JUST_ENABLED" = true ] || [ "$I2C_ALREADY_ENABLED" = true ]; then
+            if ! grep -q "^i2c-dev" /etc/modules 2>/dev/null; then
+                echo "i2c-dev" >> /etc/modules
+                echo "  Added i2c-dev to /etc/modules"
+            fi
+
+            # Try to load the module immediately (may require reboot to take full effect)
+            modprobe i2c-dev 2>/dev/null || echo "  Note: i2c-dev module will be loaded on next reboot"
+        fi
+
         # Only show warnings if I2C was just enabled
         if [ "$I2C_JUST_ENABLED" = true ]; then
-            # I2C was just enabled, try to load module and check
-            modprobe i2c-dev 2>/dev/null || echo "  Warning: Could not load i2c-dev module"
-
             # Verify I2C is accessible
             if [ -e /dev/i2c-1 ] || [ -e /dev/i2c-0 ]; then
                 echo "  I2C device files found - I2C should be working"

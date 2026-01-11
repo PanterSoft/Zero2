@@ -221,54 +221,68 @@ class DisplayManager:
 
     def _draw_battery_icon(self, x, y, percentage=None):
         """Draw a simple battery icon."""
-        # Battery outline: 16x8 pixels
-        # Outer rectangle
-        self.draw.rectangle([x, y+2, x+14, y+8], outline=255, fill=0)
-        # Positive terminal
-        self.draw.rectangle([x+14, y+4, x+16, y+6], outline=255, fill=255)
+        # Battery outline: 14x6 pixels (fits in 12px menu bar)
+        # Outer rectangle (y+2 to y+8 = 6px height, fits in menu bar)
+        self.draw.rectangle([x, y+2, x+13, y+8], outline=255, fill=0)
+        # Positive terminal (small bump on right)
+        self.draw.rectangle([x+13, y+4, x+15, y+6], outline=255, fill=255)
 
         if percentage is not None:
-            # Fill level (12 pixels wide for the fill area)
-            fill_width = int(12 * percentage / 100)
+            # Fill level (11 pixels wide for the fill area)
+            fill_width = int(11 * percentage / 100)
             if fill_width > 0:
                 self.draw.rectangle([x+1, y+3, x+1+fill_width, y+7], outline=255, fill=255)
 
-            # Percentage text (small, next to icon)
-            self.draw.text((x+18, y+1), f"{percentage}%", font=self.font, fill=255)
+            # Percentage text (small, next to icon) - ensure it fits
+            text_x = x + 17
+            if text_x + 20 < self.width:  # Check if text fits
+                self.draw.text((text_x, y+1), f"{percentage}%", font=self.font, fill=255)
         else:
             # Show "?" if battery status unavailable
-            self.draw.text((x+18, y+1), "?", font=self.font, fill=255)
+            text_x = x + 17
+            if text_x + 5 < self.width:  # Check if text fits
+                self.draw.text((text_x, y+1), "?", font=self.font, fill=255)
 
     def _draw_wifi_icon(self, x, y, status=None):
         """Draw a simple WiFi icon."""
+        # Ensure icon fits within menu bar bounds (y+2 to y+10 = 8px height)
+        icon_size = 6
+        icon_y_start = y + 3  # Start at y+3 to fit in menu bar
+        icon_y_end = y + 9     # End at y+9 (fits in 12px menu bar)
+
         if status == 'connected':
             # Connected: show signal bars
-            # Signal bars (3 bars)
-            self.draw.arc([x, y+4, x+6, y+10], start=180, end=0, fill=255)  # Outer arc
-            self.draw.arc([x+2, y+6, x+4, y+8], start=180, end=0, fill=255)  # Inner arc
-            self.draw.point([x+3, y+7], fill=255)  # Center dot
+            # Signal bars (3 bars) - adjusted to fit menu bar
+            self.draw.arc([x, icon_y_start+1, x+icon_size, icon_y_end], start=180, end=0, fill=255)  # Outer arc
+            self.draw.arc([x+2, icon_y_start+3, x+4, icon_y_start+5], start=180, end=0, fill=255)  # Inner arc
+            self.draw.point([x+3, icon_y_start+4], fill=255)  # Center dot
         elif status == 'enabled':
             # Enabled but not connected: show outline
-            self.draw.arc([x, y+4, x+6, y+10], start=180, end=0, outline=255)
+            self.draw.arc([x, icon_y_start+1, x+icon_size, icon_y_end], start=180, end=0, outline=255)
         else:
             # Disabled: show X
-            self.draw.line([x, y+4, x+6, y+10], fill=255)
-            self.draw.line([x+6, y+4, x, y+10], fill=255)
+            self.draw.line([x, icon_y_start+1, x+icon_size, icon_y_end], fill=255)
+            self.draw.line([x+icon_size, icon_y_start+1, x, icon_y_end], fill=255)
 
     def _draw_bluetooth_icon(self, x, y, status=None):
         """Draw a simple Bluetooth icon."""
+        # Ensure icon fits within menu bar bounds (y+2 to y+10 = 8px height)
+        icon_size = 6
+        icon_y_start = y + 2  # Start at y+2
+        icon_y_end = y + 10    # End at y+10 (fits in 12px menu bar)
+
         if status == 'enabled':
-            # Bluetooth symbol (simplified)
+            # Bluetooth symbol (simplified) - adjusted to fit menu bar
             # Top triangle
-            self.draw.polygon([(x+3, y+2), (x+6, y+5), (x+3, y+8)], outline=255, fill=0)
+            self.draw.polygon([(x+3, icon_y_start), (x+icon_size, icon_y_start+3), (x+3, icon_y_start+6)], outline=255, fill=0)
             # Bottom triangle
-            self.draw.polygon([(x+3, y+6), (x+6, y+9), (x+3, y+10)], outline=255, fill=0)
+            self.draw.polygon([(x+3, icon_y_start+6), (x+icon_size, icon_y_start+9), (x+3, icon_y_end)], outline=255, fill=0)
             # Center line
-            self.draw.line([x+3, y+2, x+3, y+10], fill=255)
+            self.draw.line([x+3, icon_y_start, x+3, icon_y_end], fill=255)
         else:
             # Disabled: show X
-            self.draw.line([x, y+2, x+6, y+10], fill=255)
-            self.draw.line([x+6, y+2, x, y+10], fill=255)
+            self.draw.line([x, icon_y_start, x+icon_size, icon_y_end], fill=255)
+            self.draw.line([x+icon_size, icon_y_start, x, icon_y_end], fill=255)
 
     def _draw_menu_bar(self):
         """Draw the top menu bar with status icons."""
@@ -283,25 +297,37 @@ class DisplayManager:
         # Update status cache if needed
         current_time = time.time()
         if current_time - self.status_cache_time > self.status_cache_interval:
-            self.status_cache['battery'] = self._get_battery_status()
+            # Only get battery status if low battery monitoring is enabled
+            enable_low_bat = get_config('ENABLE_LOW_BAT', False)
+            if enable_low_bat:
+                self.status_cache['battery'] = self._get_battery_status()
+            else:
+                self.status_cache['battery'] = None
             self.status_cache['wifi'] = self._get_wifi_status()
             self.status_cache['bluetooth'] = self._get_bluetooth_status()
             self.status_cache_time = current_time
 
-        # Battery icon (leftmost)
-        self._draw_battery_icon(x, 2, self.status_cache.get('battery'))
-        x += 40  # Move right (battery icon + text)
+        # Battery icon (leftmost) - only show if battery monitoring is enabled
+        enable_low_bat = get_config('ENABLE_LOW_BAT', False)
+        if enable_low_bat:
+            battery_status = self.status_cache.get('battery')
+            self._draw_battery_icon(x, 0, battery_status)
+            # Move right: battery icon (15px) + spacing + text (up to 20px) = ~40px
+            x += 40
+            # Ensure we don't go beyond screen width
+            if x >= self.width - 20:
+                x = self.width - 20
 
         # WiFi icon
         wifi_status = self.status_cache.get('wifi')
-        if wifi_status is not None:
-            self._draw_wifi_icon(x, 2, wifi_status)
+        if wifi_status is not None and x + 8 < self.width:
+            self._draw_wifi_icon(x, 0, wifi_status)
             x += 10
 
         # Bluetooth icon
         bt_status = self.status_cache.get('bluetooth')
-        if bt_status is not None:
-            self._draw_bluetooth_icon(x, 2, bt_status)
+        if bt_status is not None and x + 8 < self.width:
+            self._draw_bluetooth_icon(x, 0, bt_status)
             x += 10
 
     def show_warning(self, message, timeout=None):
