@@ -203,6 +203,7 @@ if [ "$ENABLE_DISPLAY" = true ]; then
         fi
 
         echo "  Note: I2C was just enabled. A reboot is required for changes to take effect"
+        echo "  Reboot with: sudo shutdown -r now  (or sudo reboot)"
     elif [ "$I2C_ALREADY_ENABLED" = true ]; then
         # I2C was already enabled, silently verify it's working (no warnings)
         if [ -e /dev/i2c-1 ] || [ -e /dev/i2c-0 ]; then
@@ -350,3 +351,4 @@ if [ "$OVERCLOCK_PROFILE" != "none" ]; then
 fi
 
 echo "Installation Complete. Please Reboot."
+echo "Reboot with: sudo shutdown -r now  (or sudo reboot)"

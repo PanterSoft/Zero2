@@ -158,5 +158,5 @@ echo "  sudo systemctl restart zero2-controller.service"
 # Only show reboot hint if I2C was actually changed
 if [ "$I2C_CHANGED" = true ]; then
     echo ""
-    echo "Note: I2C was just enabled. A reboot may be required: sudo reboot"
+    echo "Note: I2C was just enabled. A reboot may be required: sudo shutdown -r now  (or sudo reboot)"
 fi
