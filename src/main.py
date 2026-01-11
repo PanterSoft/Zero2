@@ -4,6 +4,7 @@ import sys
 from modules.display import DisplayManager
 from modules.power import PowerManager
 from modules.buttons import ButtonHandler
+from modules.menu import MenuSystem
 from modules.config import read_config, get_config
 from modules.logger import setup_logger
 
@@ -35,50 +36,55 @@ def main():
             buttons = ButtonHandler()
             logger.info("Button handler initialized successfully")
 
-            # Example: Register callbacks for buttons
-            # You can customize these actions based on your needs
-            def button_a_pressed():
-                logger.info("Button A pressed")
-                if display:
-                    display.show_warning("Button A", timeout=2)
-
-            def button_b_pressed():
-                logger.info("Button B pressed")
-                if display:
-                    display.show_warning("Button B", timeout=2)
-
-            def button_select_pressed():
-                logger.info("Select button pressed")
-                if display:
-                    display.show_warning("Select", timeout=2)
-
+            # Menu navigation callbacks
             def button_up_pressed():
-                logger.info("D-pad Up pressed")
                 if display:
-                    display.show_warning("Up", timeout=2)
+                    display.menu.navigate_up()
+                    display.update_info()  # Immediate update
 
             def button_down_pressed():
-                logger.info("D-pad Down pressed")
                 if display:
-                    display.show_warning("Down", timeout=2)
+                    display.menu.navigate_down()
+                    display.update_info()  # Immediate update
 
             def button_left_pressed():
-                logger.info("D-pad Left pressed")
                 if display:
-                    display.show_warning("Left", timeout=2)
+                    display.menu.navigate_left()
+                    display.update_info()  # Immediate update
 
             def button_right_pressed():
-                logger.info("D-pad Right pressed")
                 if display:
-                    display.show_warning("Right", timeout=2)
+                    display.menu.navigate_right()
+                    display.update_info()  # Immediate update
 
-            buttons.register_callback('A', button_a_pressed)
-            buttons.register_callback('B', button_b_pressed)
-            buttons.register_callback('SELECT', button_select_pressed)
+            def button_select_pressed():
+                if display:
+                    display.menu.select()
+                    display.update_info()  # Immediate update
+
+            def button_a_pressed():
+                # Button A: Toggle menu or custom action
+                if display:
+                    current_menu = display.menu.get_current_menu()
+                    if current_menu != MenuSystem.MENU_MAIN:
+                        display.menu.go_back()
+                    display.update_info()
+
+            def button_b_pressed():
+                # Button B: Custom action or back
+                if display:
+                    current_menu = display.menu.get_current_menu()
+                    if current_menu != MenuSystem.MENU_MAIN:
+                        display.menu.go_back()
+                    display.update_info()
+
             buttons.register_callback('UP', button_up_pressed)
             buttons.register_callback('DOWN', button_down_pressed)
             buttons.register_callback('LEFT', button_left_pressed)
             buttons.register_callback('RIGHT', button_right_pressed)
+            buttons.register_callback('SELECT', button_select_pressed)
+            buttons.register_callback('A', button_a_pressed)
+            buttons.register_callback('B', button_b_pressed)
 
         except Exception as e:
             logger.error(f"Failed to initialize buttons: {e}", exc_info=True)

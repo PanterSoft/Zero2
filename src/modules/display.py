@@ -7,6 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 import adafruit_ssd1306
 from modules.logger import get_logger
 from modules.config import get_config, read_config
+from modules.menu import MenuSystem
 
 logger = get_logger(__name__)
 
@@ -158,6 +159,14 @@ class DisplayManager:
         # Thread lock for display updates (ensure thread safety)
         self.display_lock = threading.Lock()
 
+        # Menu system
+        self.menu = MenuSystem()
+
+        # Network stats cache
+        self.network_stats_cache = {}
+        self.network_stats_cache_time = 0
+        self.network_stats_cache_interval = 2  # Update network stats every 2 seconds
+
     def _get_battery_status(self):
         """Get battery percentage if available."""
         try:
@@ -243,6 +252,57 @@ class DisplayManager:
             return 'disabled'
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return None
+
+    def _get_network_stats(self, interface):
+        """Get network statistics for an interface (bytes sent/received)."""
+        try:
+            with open(f'/sys/class/net/{interface}/statistics/rx_bytes', 'r') as f:
+                rx_bytes = int(f.read().strip())
+            with open(f'/sys/class/net/{interface}/statistics/tx_bytes', 'r') as f:
+                tx_bytes = int(f.read().strip())
+            return {'rx': rx_bytes, 'tx': tx_bytes}
+        except (FileNotFoundError, ValueError, IOError):
+            return None
+
+    def _format_bytes(self, bytes_value):
+        """Format bytes to human-readable format."""
+        if bytes_value is None:
+            return "0B"
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if bytes_value < 1024.0:
+                if unit == 'B':
+                    return f"{int(bytes_value)}{unit}"
+                return f"{bytes_value:.1f}{unit}"
+            bytes_value /= 1024.0
+        return f"{bytes_value:.1f}TB"
+
+    def _get_network_usage_delta(self, interface):
+        """Get network usage delta (bytes sent/received since last check)."""
+        current_time = time.time()
+        current_stats = self._get_network_stats(interface)
+
+        if current_stats is None:
+            return None
+
+        cache_key = f"{interface}_stats"
+        if cache_key in self.network_stats_cache:
+            last_stats = self.network_stats_cache[cache_key]['stats']
+            last_time = self.network_stats_cache[cache_key]['time']
+            time_delta = current_time - last_time
+
+            if time_delta > 0:
+                rx_delta = current_stats['rx'] - last_stats['rx']
+                tx_delta = current_stats['tx'] - last_stats['tx']
+                rx_rate = rx_delta / time_delta
+                tx_rate = tx_delta / time_delta
+                return {'rx': rx_rate, 'tx': tx_rate, 'rx_total': current_stats['rx'], 'tx_total': current_stats['tx']}
+
+        # Cache current stats
+        self.network_stats_cache[cache_key] = {
+            'stats': current_stats,
+            'time': current_time
+        }
+        return {'rx': 0, 'tx': 0, 'rx_total': current_stats['rx'], 'tx_total': current_stats['tx']}
 
     def _draw_battery_icon(self, x, y, percentage=None):
         """Draw a simple battery icon."""
@@ -422,30 +482,217 @@ class DisplayManager:
                     self.disp.show()
                     return
 
-            # Shell scripts for system monitoring from here:
-            # https://unix.stackexchange.com/questions/119126/command-to-display-memory-usage-disk-usage-and-cpu-load
-            try:
-                cmd = "hostname -I | cut -d' ' -f1"
-                IP = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-                cmd = "top -bn1 | grep load | awk '{printf \"CPU: %.2f\", $(NF-2)}'"
-                CPU = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-                cmd = "free -m | awk 'NR==2{printf \"Mem: %s/%sMB\", $3,$2}'"
-                MemUsage = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-            except Exception as e:
-                logger.warning(f"Failed to get system info: {e}")
-                IP = "N/A"
-                CPU = "N/A"
-                MemUsage = "N/A"
+            # Display content based on current menu
+            current_menu = self.menu.get_current_menu()
 
-            # Write operations (starting below menu bar)
-            y_offset = self.content_start_y
-            line_height = 13
-
-            self.draw.text((2, y_offset), f"IP: {IP}", font=self.font, fill=255)
-            self.draw.text((2, y_offset + line_height), CPU, font=self.font, fill=255)
-            self.draw.text((2, y_offset + (line_height * 2)), MemUsage, font=self.font, fill=255)
-            self.draw.text((2, y_offset + (line_height * 3)), "Zero2 Controller", font=self.font, fill=255)
+            if current_menu == MenuSystem.MENU_MAIN:
+                self._draw_dashboard()
+            elif current_menu == MenuSystem.MENU_NETWORK:
+                self._draw_network_menu()
+            elif current_menu == MenuSystem.MENU_SYSTEM:
+                self._draw_system_menu()
+            elif current_menu == MenuSystem.MENU_POWER:
+                self._draw_power_menu()
+            else:
+                self._draw_dashboard()
 
             # Display image.
             self.disp.image(self.image)
             self.disp.show()
+
+    def _draw_dashboard(self):
+        """Draw compact dashboard with more information."""
+        y_offset = self.content_start_y
+        line_height = 11  # Reduced line height for more compact display
+
+        # Get system info
+        try:
+            # IP addresses (compact)
+            cmd = "hostname -I | awk '{print $1}'"
+            IP = subprocess.check_output(cmd, shell=True).decode("utf-8").strip() or "N/A"
+
+            # CPU load (compact)
+            cmd = "top -bn1 | grep load | awk '{printf \"%.2f\", $(NF-2)}'"
+            CPU_load = subprocess.check_output(cmd, shell=True).decode("utf-8").strip() or "0.00"
+
+            # Memory (compact)
+            cmd = "free -m | awk 'NR==2{printf \"%d/%d\", $3,$2}'"
+            MemUsage = subprocess.check_output(cmd, shell=True).decode("utf-8").strip() or "N/A"
+
+            # Disk usage (compact)
+            cmd = "df -h / | awk 'NR==2{print $5}'"
+            DiskUsage = subprocess.check_output(cmd, shell=True).decode("utf-8").strip() or "N/A"
+
+        except Exception as e:
+            logger.warning(f"Failed to get system info: {e}")
+            IP = "N/A"
+            CPU_load = "0.00"
+            MemUsage = "N/A"
+            DiskUsage = "N/A"
+
+        # Get network usage (update cache)
+        current_time = time.time()
+        if current_time - self.network_stats_cache_time > self.network_stats_cache_interval:
+            # Update network stats cache
+            for interface in ['eth0', 'wlan0', 'usb0']:
+                stats = self._get_network_usage_delta(interface)
+                if stats:
+                    self.network_stats_cache[f"{interface}_usage"] = stats
+            self.network_stats_cache_time = current_time
+
+        # Draw compact dashboard (4 lines of info)
+        y = y_offset
+
+        # Line 1: IP and CPU (compact)
+        self.draw.text((2, y), f"IP:{IP[:12]}", font=self.font, fill=255)
+        self.draw.text((70, y), f"CPU:{CPU_load}", font=self.font, fill=255)
+        y += line_height
+
+        # Line 2: Memory and Disk (compact)
+        self.draw.text((2, y), f"Mem:{MemUsage}MB", font=self.font, fill=255)
+        self.draw.text((70, y), f"Disk:{DiskUsage}", font=self.font, fill=255)
+        y += line_height
+
+        # Line 3: WiFi usage (if available)
+        wlan_stats = self.network_stats_cache.get('wlan0_usage')
+        if wlan_stats:
+            rx_rate = self._format_bytes(wlan_stats['rx']) + '/s'
+            tx_rate = self._format_bytes(wlan_stats['tx']) + '/s'
+            self.draw.text((2, y), f"WiFi:↓{rx_rate} ↑{tx_rate}", font=self.font, fill=255)
+        else:
+            self.draw.text((2, y), "WiFi: N/A", font=self.font, fill=255)
+        y += line_height
+
+        # Line 4: Ethernet usage (if available)
+        eth_stats = self.network_stats_cache.get('eth0_usage')
+        if eth_stats:
+            rx_rate = self._format_bytes(eth_stats['rx']) + '/s'
+            tx_rate = self._format_bytes(eth_stats['tx']) + '/s'
+            self.draw.text((2, y), f"Eth:↓{rx_rate} ↑{tx_rate}", font=self.font, fill=255)
+        else:
+            # Show USB0 if eth0 not available
+            usb_stats = self.network_stats_cache.get('usb0_usage')
+            if usb_stats:
+                rx_rate = self._format_bytes(usb_stats['rx']) + '/s'
+                tx_rate = self._format_bytes(usb_stats['tx']) + '/s'
+                self.draw.text((2, y), f"USB:↓{rx_rate} ↑{tx_rate}", font=self.font, fill=255)
+            else:
+                self.draw.text((2, y), "Eth: N/A", font=self.font, fill=255)
+
+    def _draw_network_menu(self):
+        """Draw network information menu."""
+        y_offset = self.content_start_y
+        line_height = 11
+
+        y = y_offset
+
+        # Get network interfaces and their IPs
+        try:
+            # WiFi IP
+            cmd = "ip addr show wlan0 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1"
+            wlan_ip = subprocess.check_output(cmd, shell=True).decode("utf-8").strip() or "N/A"
+
+            # Ethernet IP
+            cmd = "ip addr show eth0 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1"
+            eth_ip = subprocess.check_output(cmd, shell=True).decode("utf-8").strip() or "N/A"
+
+            # USB0 IP
+            cmd = "ip addr show usb0 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1"
+            usb_ip = subprocess.check_output(cmd, shell=True).decode("utf-8").strip() or "N/A"
+
+        except Exception as e:
+            logger.warning(f"Failed to get network info: {e}")
+            wlan_ip = "N/A"
+            eth_ip = "N/A"
+            usb_ip = "N/A"
+
+        # Display network information
+        self.draw.text((2, y), "Network Info", font=self.font, fill=255)
+        y += line_height
+
+        self.draw.text((2, y), f"WiFi: {wlan_ip}", font=self.font, fill=255)
+        y += line_height
+
+        self.draw.text((2, y), f"Eth: {eth_ip}", font=self.font, fill=255)
+        y += line_height
+
+        self.draw.text((2, y), f"USB: {usb_ip}", font=self.font, fill=255)
+        y += line_height
+
+        # Show network usage totals
+        wlan_stats = self.network_stats_cache.get('wlan0_usage')
+        if wlan_stats:
+            rx_total = self._format_bytes(wlan_stats['rx_total'])
+            tx_total = self._format_bytes(wlan_stats['tx_total'])
+            self.draw.text((2, y), f"WiFi: ↓{rx_total} ↑{tx_total}", font=self.font, fill=255)
+
+    def _draw_system_menu(self):
+        """Draw system information menu."""
+        y_offset = self.content_start_y
+        line_height = 11
+
+        y = y_offset
+
+        try:
+            # Uptime
+            cmd = "uptime -p | sed 's/up //'"
+            uptime = subprocess.check_output(cmd, shell=True).decode("utf-8").strip() or "N/A"
+
+            # CPU temperature
+            cmd = "vcgencmd measure_temp | cut -d'=' -f2"
+            temp = subprocess.check_output(cmd, shell=True).decode("utf-8").strip() or "N/A"
+
+            # CPU frequency
+            cmd = "vcgencmd measure_clock arm | awk -F= '{printf \"%.0f\", $2/1000000}'"
+            cpu_freq = subprocess.check_output(cmd, shell=True).decode("utf-8").strip() or "N/A"
+
+            # Load average
+            cmd = "uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//'"
+            load_avg = subprocess.check_output(cmd, shell=True).decode("utf-8").strip() or "N/A"
+
+        except Exception as e:
+            logger.warning(f"Failed to get system info: {e}")
+            uptime = "N/A"
+            temp = "N/A"
+            cpu_freq = "N/A"
+            load_avg = "N/A"
+
+        self.draw.text((2, y), "System Info", font=self.font, fill=255)
+        y += line_height
+
+        self.draw.text((2, y), f"Uptime: {uptime[:15]}", font=self.font, fill=255)
+        y += line_height
+
+        self.draw.text((2, y), f"Temp: {temp}", font=self.font, fill=255)
+        y += line_height
+
+        self.draw.text((2, y), f"CPU: {cpu_freq}MHz", font=self.font, fill=255)
+        y += line_height
+
+        self.draw.text((2, y), f"Load: {load_avg}", font=self.font, fill=255)
+
+    def _draw_power_menu(self):
+        """Draw power information menu."""
+        y_offset = self.content_start_y
+        line_height = 11
+
+        y = y_offset
+
+        battery_status = self.status_cache.get('battery')
+
+        self.draw.text((2, y), "Power Info", font=self.font, fill=255)
+        y += line_height
+
+        if battery_status is not None:
+            self.draw.text((2, y), f"Battery: {battery_status}%", font=self.font, fill=255)
+        else:
+            self.draw.text((2, y), "Battery: N/A", font=self.font, fill=255)
+        y += line_height
+
+        # Voltage (if available)
+        try:
+            cmd = "vcgencmd measure_volts core | cut -d'=' -f2"
+            voltage = subprocess.check_output(cmd, shell=True).decode("utf-8").strip() or "N/A"
+            self.draw.text((2, y), f"Voltage: {voltage}", font=self.font, fill=255)
+        except:
+            pass
