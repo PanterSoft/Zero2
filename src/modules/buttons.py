@@ -1,4 +1,5 @@
 import time
+import threading
 import board
 import digitalio
 from modules.logger import get_logger
@@ -21,12 +22,13 @@ class ButtonHandler:
     """
 
     # GPIO pin mappings for Adafruit 128x64 OLED Bonnet
+    # Note: Pin mappings corrected based on actual hardware behavior
     BUTTON_A_PIN = 5
     BUTTON_B_PIN = 6
-    DPAD_UP_PIN = 23
-    DPAD_DOWN_PIN = 17
-    DPAD_LEFT_PIN = 22
-    DPAD_RIGHT_PIN = 27
+    DPAD_UP_PIN = 27      # GPIO 27 is actually UP
+    DPAD_DOWN_PIN = 23    # GPIO 23 is actually DOWN
+    DPAD_LEFT_PIN = 17    # GPIO 17 is actually LEFT
+    DPAD_RIGHT_PIN = 22   # GPIO 22 is actually RIGHT
     DPAD_SELECT_PIN = 4
 
     def __init__(self):
@@ -34,6 +36,8 @@ class ButtonHandler:
         self.button_callbacks = {}
         self.last_press_time = {}
         self.debounce_time = 0.1  # 100ms debounce
+        self.callback_lock = threading.Lock()
+        self.running = True
 
         # Initialize all buttons
         try:
@@ -119,10 +123,23 @@ class ButtonHandler:
             logger.debug(f"Error reading button {button_name}: {e}")
             return False
 
+    def _execute_callback(self, button_name, callback):
+        """Execute callback in a separate thread to avoid blocking."""
+        def run_callback():
+            try:
+                callback()
+                logger.debug(f"Button {button_name} pressed - callback executed")
+            except Exception as e:
+                logger.error(f"Error in button {button_name} callback: {e}", exc_info=True)
+
+        thread = threading.Thread(target=run_callback, daemon=True)
+        thread.start()
+
     def check_buttons(self):
         """
         Check all buttons and trigger callbacks if pressed.
         This should be called periodically in the main loop.
+        Callbacks are executed in separate threads to avoid blocking display updates.
         """
         current_time = time.time()
 
@@ -136,13 +153,10 @@ class ButtonHandler:
                     if current_time - self.last_press_time[button_name] > self.debounce_time:
                         self.last_press_time[button_name] = current_time
 
-                        # Trigger callback if registered
+                        # Trigger callback if registered (non-blocking)
                         if button_name in self.button_callbacks:
-                            try:
-                                self.button_callbacks[button_name]()
-                                logger.debug(f"Button {button_name} pressed - callback triggered")
-                            except Exception as e:
-                                logger.error(f"Error in button {button_name} callback: {e}", exc_info=True)
+                            # Execute callback in separate thread to avoid blocking
+                            self._execute_callback(button_name, self.button_callbacks[button_name])
                         else:
                             logger.debug(f"Button {button_name} pressed - no callback registered")
             except Exception as e:

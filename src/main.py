@@ -101,22 +101,25 @@ def main():
     logger.info("Entering main loop")
     display_interval = config.get('DISPLAY_UPDATE_INTERVAL', 2)
     last_display_update = 0
+    button_check_interval = 0.05  # Check buttons every 50ms
+    last_button_check = 0
 
     while True:
         try:
             current_time = time.time()
 
-            # Check buttons periodically
-            if buttons:
+            # Check buttons frequently but independently of display updates
+            if buttons and (current_time - last_button_check) >= button_check_interval:
                 buttons.check_buttons()
+                last_button_check = current_time
 
-            # Update display at configured interval
+            # Update display at configured interval (independent of button checks)
             if display and (current_time - last_display_update) >= display_interval:
                 display.update_info()
                 last_display_update = current_time
 
             # Small sleep to avoid busy-waiting
-            time.sleep(0.1)
+            time.sleep(0.01)  # Reduced sleep for more responsive button checking
 
         except Exception as e:
             logger.error(f"Error in main loop: {e}", exc_info=True)
