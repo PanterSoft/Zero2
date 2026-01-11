@@ -99,67 +99,7 @@ iface bnep0 inet static
 EOF
 fi
 
-# 4. Setup WiFi Hotspot
-if [ "$ENABLE_WIFI_HOTSPOT" = true ]; then
-    echo "Configuring WiFi Hotspot..."
-
-    # Stop services if running
-    systemctl stop hostapd dnsmasq || true
-
-    # Configure hostapd
-    cat > /etc/hostapd/hostapd.conf <<EOF
-interface=wlan0
-driver=nl80211
-ssid=Zero2_Hotspot
-hw_mode=g
-channel=7
-wmm_enabled=0
-macaddr_acl=0
-auth_algs=1
-ignore_broadcast_ssid=0
-wpa=2
-wpa_passphrase=zero2pass
-wpa_key_mgmt=WPA-PSK
-wpa_pairwise=TKIP
-rsn_pairwise=CCMP
-EOF
-
-    # Set hostapd config path
-    sed -i 's|^#DAEMON_CONF=.*|DAEMON_CONF="/etc/hostapd/hostapd.conf"|' /etc/default/hostapd || echo 'DAEMON_CONF="/etc/hostapd/hostapd.conf"' >> /etc/default/hostapd
-
-    # Configure dnsmasq
-    mv /etc/dnsmasq.conf /etc/dnsmasq.conf.bak || true
-    cat > /etc/dnsmasq.conf <<EOF
-interface=wlan0
-dhcp-range=192.168.50.10,192.168.50.50,255.255.255.0,24h
-domain=local
-address=/gw.local/192.168.50.1
-EOF
-
-    # Configure wlan0 static IP
-    mkdir -p /etc/network/interfaces.d
-    cat > /etc/network/interfaces.d/wlan0 <<EOF
-allow-hotplug wlan0
-iface wlan0 inet static
-    address 192.168.50.1
-    netmask 255.255.255.0
-    post-up systemctl start hostapd
-    post-up systemctl start dnsmasq
-EOF
-
-    # Enable IP forwarding
-    if ! grep -q "^net.ipv4.ip_forward=1" /etc/sysctl.conf; then
-        echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
-    fi
-    sysctl -w net.ipv4.ip_forward=1
-
-    # Unmask and enable services
-    systemctl unmask hostapd
-    #systemctl enable hostapd
-    #systemctl enable dnsmasq
-fi
-
-# 5. Setup Python Environment
+# 4. Setup Python Environment
 echo "Setting up Python Environment..."
 if [ ! -d "venv" ]; then
     python3 -m venv venv
@@ -167,7 +107,7 @@ fi
 
 ./venv/bin/pip install -r requirements.txt
 
-# 6. Enable I2C for Display
+# 5. Enable I2C for Display
 if [ "$ENABLE_DISPLAY" = true ]; then
     echo "Enabling I2C..."
     if ! grep -q "dtparam=i2c_arm=on" /boot/config.txt; then
@@ -182,7 +122,7 @@ if ! grep -q "gpu_mem=" /boot/config.txt; then
     echo "gpu_mem=16" >> /boot/config.txt
 fi
 
-# 7. Install Systemd Services
+# 6. Install Systemd Services
 echo "Installing Systemd Services..."
 cp systemd/zero2-controller.service /etc/systemd/system/
 if [ "$ENABLE_SSH_BT" = true ]; then
@@ -193,7 +133,7 @@ fi
 systemctl daemon-reload
 #systemctl enable zero2-controller.service
 
-# 8. Apply Overclocking
+# 7. Apply Overclocking
 if [ "$OVERCLOCK_PROFILE" != "none" ]; then
     echo "Applying Overclock Profile: $OVERCLOCK_PROFILE"
 
