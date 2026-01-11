@@ -59,16 +59,23 @@ class ButtonHandler:
             button.pull = digitalio.Pull.UP  # Buttons are active LOW (pulled up)
             self.buttons[name] = button
             self.last_press_time[name] = 0
-        except AttributeError:
-            # Fallback: try direct pin number if board.GP* doesn't exist
+            logger.debug(f"Initialized button {name} on GPIO {pin_number} using CircuitPython")
+        except (AttributeError, ValueError, RuntimeError) as e:
+            # Fallback: try RPi.GPIO if CircuitPython method fails
+            logger.debug(f"CircuitPython method failed for button {name} on GPIO {pin_number}: {e}")
             try:
                 import RPi.GPIO as GPIO
-                GPIO.setmode(GPIO.BCM)
+                # Only set mode once (check if already set)
+                try:
+                    GPIO.setmode(GPIO.BCM)
+                except RuntimeError:
+                    pass  # Already set
                 GPIO.setup(pin_number, GPIO.IN, pull_up_down=GPIO.PUD_UP)
                 self.buttons[name] = {'pin': pin_number, 'type': 'RPi'}
                 self.last_press_time[name] = 0
-            except Exception as e:
-                logger.warning(f"Could not initialize button {name} on GPIO {pin_number}: {e}")
+                logger.debug(f"Initialized button {name} on GPIO {pin_number} using RPi.GPIO")
+            except Exception as e2:
+                logger.warning(f"Could not initialize button {name} on GPIO {pin_number}: {e2}")
                 self.buttons[name] = None
 
     def register_callback(self, button_name, callback):
@@ -123,20 +130,23 @@ class ButtonHandler:
             if button is None:
                 continue
 
-            if self.is_pressed(button_name):
-                # Debounce: only trigger if enough time has passed since last press
-                if current_time - self.last_press_time[button_name] > self.debounce_time:
-                    self.last_press_time[button_name] = current_time
+            try:
+                if self.is_pressed(button_name):
+                    # Debounce: only trigger if enough time has passed since last press
+                    if current_time - self.last_press_time[button_name] > self.debounce_time:
+                        self.last_press_time[button_name] = current_time
 
-                    # Trigger callback if registered
-                    if button_name in self.button_callbacks:
-                        try:
-                            self.button_callbacks[button_name]()
-                            logger.debug(f"Button {button_name} pressed - callback triggered")
-                        except Exception as e:
-                            logger.error(f"Error in button {button_name} callback: {e}", exc_info=True)
-                    else:
-                        logger.debug(f"Button {button_name} pressed - no callback registered")
+                        # Trigger callback if registered
+                        if button_name in self.button_callbacks:
+                            try:
+                                self.button_callbacks[button_name]()
+                                logger.debug(f"Button {button_name} pressed - callback triggered")
+                            except Exception as e:
+                                logger.error(f"Error in button {button_name} callback: {e}", exc_info=True)
+                        else:
+                            logger.debug(f"Button {button_name} pressed - no callback registered")
+            except Exception as e:
+                logger.debug(f"Error checking button {button_name}: {e}")
 
     def cleanup(self):
         """Clean up GPIO resources."""

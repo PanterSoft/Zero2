@@ -52,9 +52,33 @@ def main():
                 if display:
                     display.show_warning("Select", timeout=2)
 
+            def button_up_pressed():
+                logger.info("D-pad Up pressed")
+                if display:
+                    display.show_warning("Up", timeout=2)
+
+            def button_down_pressed():
+                logger.info("D-pad Down pressed")
+                if display:
+                    display.show_warning("Down", timeout=2)
+
+            def button_left_pressed():
+                logger.info("D-pad Left pressed")
+                if display:
+                    display.show_warning("Left", timeout=2)
+
+            def button_right_pressed():
+                logger.info("D-pad Right pressed")
+                if display:
+                    display.show_warning("Right", timeout=2)
+
             buttons.register_callback('A', button_a_pressed)
             buttons.register_callback('B', button_b_pressed)
             buttons.register_callback('SELECT', button_select_pressed)
+            buttons.register_callback('UP', button_up_pressed)
+            buttons.register_callback('DOWN', button_down_pressed)
+            buttons.register_callback('LEFT', button_left_pressed)
+            buttons.register_callback('RIGHT', button_right_pressed)
 
         except Exception as e:
             logger.error(f"Failed to initialize buttons: {e}", exc_info=True)
