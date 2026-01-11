@@ -31,52 +31,72 @@ def main():
     # 2. Initialize Buttons (if enabled)
     config = read_config()
     buttons = None
-    if config.get('ENABLE_BUTTONS', True) and config.get('ENABLE_DISPLAY', True):
+    # Initialize buttons if enabled (buttons can work even if display failed)
+    if config.get('ENABLE_BUTTONS', True):
         try:
             buttons = ButtonHandler()
             logger.info("Button handler initialized successfully")
 
             # Menu navigation callbacks
             def button_up_pressed():
+                logger.info("Button UP pressed")
                 if display:
                     display.menu.navigate_up()
                     display.update_info()  # Immediate update
+                else:
+                    logger.warning("Display not available for button UP")
 
             def button_down_pressed():
+                logger.info("Button DOWN pressed")
                 if display:
                     display.menu.navigate_down()
                     display.update_info()  # Immediate update
+                else:
+                    logger.warning("Display not available for button DOWN")
 
             def button_left_pressed():
+                logger.info("Button LEFT pressed")
                 if display:
                     display.menu.navigate_left()
                     display.update_info()  # Immediate update
+                else:
+                    logger.warning("Display not available for button LEFT")
 
             def button_right_pressed():
+                logger.info("Button RIGHT pressed")
                 if display:
                     display.menu.navigate_right()
                     display.update_info()  # Immediate update
+                else:
+                    logger.warning("Display not available for button RIGHT")
 
             def button_select_pressed():
+                logger.info("Button SELECT pressed")
                 if display:
                     display.menu.select()
                     display.update_info()  # Immediate update
+                else:
+                    logger.warning("Display not available for button SELECT")
 
             def button_a_pressed():
-                # Button A: Toggle menu or custom action
+                logger.info("Button A pressed")
                 if display:
                     current_menu = display.menu.get_current_menu()
                     if current_menu != MenuSystem.MENU_MAIN:
                         display.menu.go_back()
                     display.update_info()
+                else:
+                    logger.warning("Display not available for button A")
 
             def button_b_pressed():
-                # Button B: Custom action or back
+                logger.info("Button B pressed")
                 if display:
                     current_menu = display.menu.get_current_menu()
                     if current_menu != MenuSystem.MENU_MAIN:
                         display.menu.go_back()
                     display.update_info()
+                else:
+                    logger.warning("Display not available for button B")
 
             buttons.register_callback('UP', button_up_pressed)
             buttons.register_callback('DOWN', button_down_pressed)
@@ -86,10 +106,14 @@ def main():
             buttons.register_callback('A', button_a_pressed)
             buttons.register_callback('B', button_b_pressed)
 
+            logger.info("All button callbacks registered successfully")
+            if not display:
+                logger.warning("Display not initialized - menu navigation will not work until display is available")
+
         except Exception as e:
             logger.error(f"Failed to initialize buttons: {e}", exc_info=True)
     else:
-        logger.info("Button handling disabled (ENABLE_BUTTONS=false or ENABLE_DISPLAY=false)")
+        logger.info("Button handling disabled (ENABLE_BUTTONS=false)")
 
     # 3. Start Power Monitor (if enabled)
     power = None

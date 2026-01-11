@@ -8,6 +8,7 @@ import adafruit_ssd1306
 from modules.logger import get_logger
 from modules.config import get_config, read_config
 from modules.menu import MenuSystem
+from modules.layout import LayoutManager
 
 logger = get_logger(__name__)
 
@@ -162,6 +163,9 @@ class DisplayManager:
 
         # Menu system
         self.menu = MenuSystem()
+
+        # Layout manager for preventing overlaps
+        self.layout = LayoutManager(width=self.width, height=self.height)
 
         # Network stats cache
         self.network_stats_cache = {}
@@ -460,10 +464,14 @@ class DisplayManager:
     def update_info(self):
         # Thread-safe display update (entire method protected)
         with self.display_lock:
+            # Clear layout manager for this frame
+            self.layout.clear()
+
             # Draw a black filled box to clear the image.
             self.draw.rectangle((0, 0, self.width, self.height), outline=0, fill=0)
 
-            # Draw menu bar with status icons
+            # Draw menu bar with status icons (register its region first)
+            menu_bar_region = self.layout.register_region(0, 0, self.width, self.menu_bar_height, "menu_bar")
             self._draw_menu_bar()
 
             # Check if warning should be displayed
@@ -475,9 +483,12 @@ class DisplayManager:
                     # Start below menu bar
                     lines = self.warning_message.split('\n')
                     for i, line in enumerate(lines[:4]):  # Max 4 lines
-                        y_pos = self.content_start_y + (i * 14)
+                        y_pos = self.content_start_y + (i * (self.layout.font_char_height + self.layout.line_spacing))
                         if y_pos < self.height:
-                            self.draw.text((2, y_pos), line[:20], font=self.font, fill=255)
+                            # Register warning text region
+                            text = line[:20]
+                            self.layout.reserve_text(2, y_pos, text, max_width=self.width - 4, name=f"warning_line_{i}")
+                            self.draw.text((2, y_pos), text, font=self.font, fill=255)
 
                     # Display image and return early
                     self.disp.image(self.image)
@@ -505,12 +516,14 @@ class DisplayManager:
     def _draw_dashboard(self):
         """Draw compact dashboard with more information."""
         y_offset = self.content_start_y
-        line_height = 10  # Reduced line height to fit 4 lines in 51px (13-64)
+        line_height = self.layout.font_char_height + self.layout.line_spacing
 
         # Available width: 128px, leave 2px margin on each side = 124px usable
         # Split into two columns: left 60px, right 64px (with 2px gap)
         left_col_x = 2
         right_col_x = 64
+        left_col_width = 60
+        right_col_width = 62
 
         # Get system info
         try:
@@ -547,21 +560,39 @@ class DisplayManager:
                     self.network_stats_cache[f"{interface}_usage"] = stats
             self.network_stats_cache_time = current_time
 
-        # Draw compact dashboard (4 lines of info)
+        # Draw compact dashboard (4 lines of info) using layout manager
         y = y_offset
 
         # Line 1: IP (left) and CPU (right)
-        ip_text = f"IP:{IP[:10]}"  # Max 10 chars to fit in 60px
+        ip_text = f"IP:{IP[:10]}"  # Max 10 chars
         cpu_text = f"CPU:{CPU_load[:5]}"  # Max 5 chars
-        self.draw.text((left_col_x, y), ip_text, font=self.font, fill=255)
-        self.draw.text((right_col_x, y), cpu_text, font=self.font, fill=255)
+
+        # Reserve and draw IP text
+        ip_region = self.layout.reserve_text(left_col_x, y, ip_text, max_width=left_col_width, name="ip")
+        if ip_region:
+            self.draw.text((left_col_x, y), ip_text, font=self.font, fill=255)
+
+        # Reserve and draw CPU text
+        cpu_region = self.layout.reserve_text(right_col_x, y, cpu_text, max_width=right_col_width, name="cpu")
+        if cpu_region:
+            self.draw.text((right_col_x, y), cpu_text, font=self.font, fill=255)
+
         y += line_height
 
         # Line 2: Memory (left) and Disk (right)
-        mem_text = f"M:{MemUsage[:8]}"  # Truncate to fit
-        disk_text = f"D:{DiskUsage[:6]}"  # Truncate to fit
-        self.draw.text((left_col_x, y), mem_text, font=self.font, fill=255)
-        self.draw.text((right_col_x, y), disk_text, font=self.font, fill=255)
+        mem_text = f"M:{MemUsage[:8]}"
+        disk_text = f"D:{DiskUsage[:6]}"
+
+        # Reserve and draw Memory text
+        mem_region = self.layout.reserve_text(left_col_x, y, mem_text, max_width=left_col_width, name="memory")
+        if mem_region:
+            self.draw.text((left_col_x, y), mem_text, font=self.font, fill=255)
+
+        # Reserve and draw Disk text
+        disk_region = self.layout.reserve_text(right_col_x, y, disk_text, max_width=right_col_width, name="disk")
+        if disk_region:
+            self.draw.text((right_col_x, y), disk_text, font=self.font, fill=255)
+
         y += line_height
 
         # Line 3: WiFi usage (full width, truncated)
@@ -570,10 +601,17 @@ class DisplayManager:
             rx_rate = self._format_bytes(wlan_stats['rx'])
             tx_rate = self._format_bytes(wlan_stats['tx'])
             wifi_text = f"WiFi:↓{rx_rate[:6]}/s ↑{tx_rate[:6]}/s"
-            wifi_text = wifi_text[:24]  # Ensure fits in 124px width
-            self.draw.text((left_col_x, y), wifi_text, font=self.font, fill=255)
         else:
-            self.draw.text((left_col_x, y), "WiFi: N/A", font=self.font, fill=255)
+            wifi_text = "WiFi: N/A"
+
+        # Truncate to fit available width
+        max_wifi_chars = (self.width - left_col_x - 2) // self.layout.font_char_width
+        wifi_text = wifi_text[:max_wifi_chars]
+
+        wifi_region = self.layout.reserve_text(left_col_x, y, wifi_text, max_width=self.width - left_col_x - 2, name="wifi")
+        if wifi_region:
+            self.draw.text((left_col_x, y), wifi_text, font=self.font, fill=255)
+
         y += line_height
 
         # Line 4: Ethernet/USB usage (full width, truncated)
@@ -582,19 +620,23 @@ class DisplayManager:
             rx_rate = self._format_bytes(eth_stats['rx'])
             tx_rate = self._format_bytes(eth_stats['tx'])
             eth_text = f"Eth:↓{rx_rate[:6]}/s ↑{tx_rate[:6]}/s"
-            eth_text = eth_text[:24]  # Ensure fits in 124px width
-            self.draw.text((left_col_x, y), eth_text, font=self.font, fill=255)
         else:
             # Show USB0 if eth0 not available
             usb_stats = self.network_stats_cache.get('usb0_usage')
             if usb_stats:
                 rx_rate = self._format_bytes(usb_stats['rx'])
                 tx_rate = self._format_bytes(usb_stats['tx'])
-                usb_text = f"USB:↓{rx_rate[:6]}/s ↑{tx_rate[:6]}/s"
-                usb_text = usb_text[:24]  # Ensure fits in 124px width
-                self.draw.text((left_col_x, y), usb_text, font=self.font, fill=255)
+                eth_text = f"USB:↓{rx_rate[:6]}/s ↑{tx_rate[:6]}/s"
             else:
-                self.draw.text((left_col_x, y), "Eth: N/A", font=self.font, fill=255)
+                eth_text = "Eth: N/A"
+
+        # Truncate to fit available width
+        max_eth_chars = (self.width - left_col_x - 2) // self.layout.font_char_width
+        eth_text = eth_text[:max_eth_chars]
+
+        eth_region = self.layout.reserve_text(left_col_x, y, eth_text, max_width=self.width - left_col_x - 2, name="eth")
+        if eth_region:
+            self.draw.text((left_col_x, y), eth_text, font=self.font, fill=255)
 
     def _draw_network_menu(self):
         """Draw network information menu."""
@@ -651,9 +693,12 @@ class DisplayManager:
     def _draw_system_menu(self):
         """Draw system information menu."""
         y_offset = self.content_start_y
-        line_height = 10  # Reduced to fit more lines
+        line_height = self.layout.font_char_height + self.layout.line_spacing
 
         y = y_offset
+        x = 2
+        max_width = self.width - x - 2
+        max_chars = max_width // self.layout.font_char_width
 
         try:
             # Uptime
@@ -679,41 +724,67 @@ class DisplayManager:
             cpu_freq = "N/A"
             load_avg = "N/A"
 
-        self.draw.text((2, y), "System", font=self.font, fill=255)
+        # Draw using layout manager
+        title_text = "System"
+        title_region = self.layout.reserve_text(x, y, title_text, max_width=max_width, name="system_title")
+        if title_region:
+            self.draw.text((x, y), title_text, font=self.font, fill=255)
         y += line_height
 
         uptime_text = f"Up:{uptime[:18]}"
-        self.draw.text((2, y), uptime_text[:22], font=self.font, fill=255)
+        uptime_text = uptime_text[:max_chars]
+        uptime_region = self.layout.reserve_text(x, y, uptime_text, max_width=max_width, name="uptime")
+        if uptime_region:
+            self.draw.text((x, y), uptime_text, font=self.font, fill=255)
         y += line_height
 
         temp_text = f"Tmp:{temp[:6]}"
-        self.draw.text((2, y), temp_text[:22], font=self.font, fill=255)
+        temp_text = temp_text[:max_chars]
+        temp_region = self.layout.reserve_text(x, y, temp_text, max_width=max_width, name="temp")
+        if temp_region:
+            self.draw.text((x, y), temp_text, font=self.font, fill=255)
         y += line_height
 
         freq_text = f"CPU:{cpu_freq[:6]}MHz"
-        self.draw.text((2, y), freq_text[:22], font=self.font, fill=255)
+        freq_text = freq_text[:max_chars]
+        freq_region = self.layout.reserve_text(x, y, freq_text, max_width=max_width, name="cpu_freq")
+        if freq_region:
+            self.draw.text((x, y), freq_text, font=self.font, fill=255)
         y += line_height
 
         load_text = f"Load:{load_avg[:6]}"
-        self.draw.text((2, y), load_text[:22], font=self.font, fill=255)
+        load_text = load_text[:max_chars]
+        load_region = self.layout.reserve_text(x, y, load_text, max_width=max_width, name="load")
+        if load_region:
+            self.draw.text((x, y), load_text, font=self.font, fill=255)
 
     def _draw_power_menu(self):
         """Draw power information menu."""
         y_offset = self.content_start_y
-        line_height = 10  # Reduced to fit more lines
+        line_height = self.layout.font_char_height + self.layout.line_spacing
 
         y = y_offset
+        x = 2
+        max_width = self.width - x - 2
+        max_chars = max_width // self.layout.font_char_width
 
         battery_status = self.status_cache.get('battery')
 
-        self.draw.text((2, y), "Power", font=self.font, fill=255)
+        # Draw using layout manager
+        title_text = "Power"
+        title_region = self.layout.reserve_text(x, y, title_text, max_width=max_width, name="power_title")
+        if title_region:
+            self.draw.text((x, y), title_text, font=self.font, fill=255)
         y += line_height
 
         if battery_status is not None:
             bat_text = f"Bat:{battery_status}%"
-            self.draw.text((2, y), bat_text[:22], font=self.font, fill=255)
         else:
-            self.draw.text((2, y), "Bat:N/A", font=self.font, fill=255)
+            bat_text = "Bat:N/A"
+        bat_text = bat_text[:max_chars]
+        bat_region = self.layout.reserve_text(x, y, bat_text, max_width=max_width, name="battery")
+        if bat_region:
+            self.draw.text((x, y), bat_text, font=self.font, fill=255)
         y += line_height
 
         # Voltage (if available)
@@ -721,6 +792,9 @@ class DisplayManager:
             cmd = "vcgencmd measure_volts core | cut -d'=' -f2"
             voltage = subprocess.check_output(cmd, shell=True).decode("utf-8").strip() or "N/A"
             volt_text = f"Volt:{voltage[:6]}"
-            self.draw.text((2, y), volt_text[:22], font=self.font, fill=255)
+            volt_text = volt_text[:max_chars]
+            volt_region = self.layout.reserve_text(x, y, volt_text, max_width=max_width, name="voltage")
+            if volt_region:
+                self.draw.text((x, y), volt_text, font=self.font, fill=255)
         except:
             pass

@@ -157,12 +157,13 @@ class ButtonHandler:
 
                         # Trigger callback if registered (non-blocking)
                         if button_name in self.button_callbacks:
+                            logger.debug(f"Button {button_name} pressed - triggering callback")
                             # Execute callback in separate thread to avoid blocking
                             self._execute_callback(button_name, self.button_callbacks[button_name])
                         else:
-                            logger.debug(f"Button {button_name} pressed - no callback registered")
+                            logger.warning(f"Button {button_name} pressed - no callback registered")
             except Exception as e:
-                logger.debug(f"Error checking button {button_name}: {e}")
+                logger.error(f"Error checking button {button_name}: {e}", exc_info=True)
 
     def cleanup(self):
         """Clean up GPIO resources."""

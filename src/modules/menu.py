@@ -39,47 +39,64 @@ class MenuSystem:
 
     def navigate_up(self):
         """Navigate up in menu."""
-        if self.current_menu == self.MENU_MAIN:
-            # In main menu, cycle through items
-            self.selected_index = (self.selected_index - 1) % len(self.menu_items[self.MENU_MAIN])
-        else:
-            # In submenu, go back
-            self.go_back()
+        try:
+            if self.current_menu == self.MENU_MAIN:
+                # In main menu, cycle through items
+                self.selected_index = (self.selected_index - 1) % len(self.menu_items[self.MENU_MAIN])
+                logger.debug(f"Menu UP: selected_index={self.selected_index}")
+            else:
+                # In submenu, go back
+                self.go_back()
+        except Exception as e:
+            logger.error(f"Error in navigate_up: {e}", exc_info=True)
 
     def navigate_down(self):
         """Navigate down in menu."""
-        if self.current_menu == self.MENU_MAIN:
-            # In main menu, cycle through items
-            self.selected_index = (self.selected_index + 1) % len(self.menu_items[self.MENU_MAIN])
-        else:
-            # In submenu, go back
-            self.go_back()
+        try:
+            if self.current_menu == self.MENU_MAIN:
+                # In main menu, cycle through items
+                self.selected_index = (self.selected_index + 1) % len(self.menu_items[self.MENU_MAIN])
+                logger.debug(f"Menu DOWN: selected_index={self.selected_index}")
+            else:
+                # In submenu, go back
+                self.go_back()
+        except Exception as e:
+            logger.error(f"Error in navigate_down: {e}", exc_info=True)
 
     def navigate_left(self):
         """Navigate left (go back)."""
-        self.go_back()
+        try:
+            self.go_back()
+        except Exception as e:
+            logger.error(f"Error in navigate_left: {e}", exc_info=True)
 
     def navigate_right(self):
         """Navigate right (select/enter)."""
-        if self.current_menu == self.MENU_MAIN:
-            item = self.menu_items[self.MENU_MAIN][self.selected_index]
-            if item["action"] != self.MENU_MAIN:
-                self.enter_menu(item["action"])
-        else:
-            # In submenu, go back
-            self.go_back()
+        try:
+            if self.current_menu == self.MENU_MAIN:
+                item = self.menu_items[self.MENU_MAIN][self.selected_index]
+                if item["action"] != self.MENU_MAIN:
+                    self.enter_menu(item["action"])
+            else:
+                # In submenu, go back
+                self.go_back()
+        except Exception as e:
+            logger.error(f"Error in navigate_right: {e}", exc_info=True)
 
     def select(self):
         """Select current menu item."""
-        if self.current_menu == self.MENU_MAIN:
-            item = self.menu_items[self.MENU_MAIN][self.selected_index]
-            if item["action"] == self.MENU_MAIN:
-                # Already on dashboard
-                pass
+        try:
+            if self.current_menu == self.MENU_MAIN:
+                item = self.menu_items[self.MENU_MAIN][self.selected_index]
+                if item["action"] == self.MENU_MAIN:
+                    # Already on dashboard
+                    logger.debug("Already on dashboard")
+                else:
+                    self.enter_menu(item["action"])
             else:
-                self.enter_menu(item["action"])
-        else:
-            self.go_back()
+                self.go_back()
+        except Exception as e:
+            logger.error(f"Error in select: {e}", exc_info=True)
 
     def enter_menu(self, menu_name):
         """Enter a submenu."""
