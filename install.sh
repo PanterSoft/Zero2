@@ -119,11 +119,42 @@ fi
 
 # 6. Enable I2C for Display
 if [ "$ENABLE_DISPLAY" = true ]; then
-    echo "Enabling I2C..."
-    if ! grep -q "dtparam=i2c_arm=on" /boot/config.txt; then
-        echo "dtparam=i2c_arm=on" >> /boot/config.txt
+    echo "Enabling I2C for display support..."
+
+    # Check if I2C is already enabled
+    I2C_ENABLED=false
+    if grep -q "^dtparam=i2c_arm=on" /boot/config.txt; then
+        I2C_ENABLED=true
+        echo "  I2C already enabled in /boot/config.txt"
+    elif grep -q "^dtparam=i2c_arm=off" /boot/config.txt; then
+        # I2C is explicitly disabled, change it to on
+        sed -i 's/^dtparam=i2c_arm=off/dtparam=i2c_arm=on/' /boot/config.txt
+        I2C_ENABLED=true
+        echo "  Changed dtparam=i2c_arm=off to dtparam=i2c_arm=on"
+    elif grep -q "^#dtparam=i2c_arm=" /boot/config.txt; then
+        # I2C line is commented out, uncomment and enable
+        sed -i 's/^#dtparam=i2c_arm=.*/dtparam=i2c_arm=on/' /boot/config.txt
+        I2C_ENABLED=true
+        echo "  Uncommented and enabled I2C in /boot/config.txt"
     fi
-    modprobe i2c-dev || true
+
+    # If I2C is not enabled yet, add it
+    if [ "$I2C_ENABLED" = false ]; then
+        echo "dtparam=i2c_arm=on" >> /boot/config.txt
+        echo "  Added dtparam=i2c_arm=on to /boot/config.txt"
+    fi
+
+    # Load I2C kernel module (works immediately, reboot needed for permanent)
+    modprobe i2c-dev 2>/dev/null || echo "  Warning: Could not load i2c-dev module (may need reboot)"
+
+    # Verify I2C is accessible
+    if [ -e /dev/i2c-1 ] || [ -e /dev/i2c-0 ]; then
+        echo "  I2C device files found - I2C should be working"
+    else
+        echo "  Warning: I2C device files not found. A reboot may be required."
+    fi
+
+    echo "  Note: If I2C was just enabled, a reboot is required for changes to take effect"
 fi
 
 # Optimize GPU Memory for Headless (Maximize RAM)

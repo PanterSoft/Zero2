@@ -11,56 +11,72 @@ logger = get_logger(__name__)
 class DisplayManager:
     def __init__(self):
         # Create the I2C interface.
-        # For Raspberry Pi, try different I2C initialization methods
-        # Error shows valid ports: ((1, 3, 2), (0, 1, 0))
-        # Format appears to be (port, scl_pin, sda_pin)
+        # For Raspberry Pi with CircuitPython, we need to use the correct initialization
+        # Error shows valid ports: ((1, 3, 2), (0, 1, 0)) - format: (port_id, scl_pin, sda_pin)
         self.i2c = None
 
         # Method 1: Try using board.I2C() if available (CircuitPython 7+)
         try:
             if hasattr(board, 'I2C'):
                 self.i2c = board.I2C()
-                logger.debug("Initialized I2C using board.I2C()")
+                logger.info("Initialized I2C using board.I2C()")
         except (ValueError, RuntimeError, AttributeError) as e:
             logger.debug(f"board.I2C() failed: {e}")
 
-        # Method 2: Try explicit GPIO pins for I2C port 1 (SCL=GPIO3, SDA=GPIO2)
+        # Method 2: Try explicit GPIO pins (port 1: GPIO3=SCL, GPIO2=SDA)
+        # Don't switch to input - let I2C driver handle pin configuration
         if self.i2c is None:
             try:
                 import digitalio
                 # Standard Raspberry Pi I2C pins: GPIO 3 (SCL) and GPIO 2 (SDA)
                 scl = digitalio.DigitalInOut(board.GP3)
                 sda = digitalio.DigitalInOut(board.GP2)
-                self.i2c = busio.I2C(scl, sda)
-                logger.debug("Initialized I2C using GPIO 3 (SCL) and GPIO 2 (SDA)")
+                # Try with frequency parameter (100kHz default, 400kHz is common)
+                self.i2c = busio.I2C(scl, sda, frequency=100000)
+                logger.info("Initialized I2C using GPIO 3 (SCL) and GPIO 2 (SDA) with frequency")
             except (ValueError, RuntimeError, AttributeError) as e:
-                logger.debug(f"I2C init with GP3/GP2 failed: {e}")
+                logger.debug(f"I2C init with GP3/GP2 (with freq) failed: {e}")
 
-        # Method 3: Try using board.SCL/SDA (might work on some configurations)
-        if self.i2c is None:
-            try:
-                self.i2c = busio.I2C(board.SCL, board.SDA)
-                logger.debug("Initialized I2C using board.SCL/SDA")
-            except (ValueError, RuntimeError) as e:
-                logger.debug(f"I2C init with board.SCL/SDA failed: {e}")
-
-        # Method 4: Try I2C port 0 (alternative pins)
+        # Method 3: Try without frequency parameter
         if self.i2c is None:
             try:
                 import digitalio
-                # Port 0 uses GPIO 1 (SCL) and GPIO 0 (SDA)
+                scl = digitalio.DigitalInOut(board.GP3)
+                sda = digitalio.DigitalInOut(board.GP2)
+                self.i2c = busio.I2C(scl, sda)
+                logger.info("Initialized I2C using GPIO 3 (SCL) and GPIO 2 (SDA)")
+            except (ValueError, RuntimeError, AttributeError) as e:
+                logger.debug(f"I2C init with GP3/GP2 (no freq) failed: {e}")
+
+        # Method 4: Try I2C port 0 (GPIO1=SCL, GPIO0=SDA)
+        if self.i2c is None:
+            try:
+                import digitalio
                 scl = digitalio.DigitalInOut(board.GP1)
                 sda = digitalio.DigitalInOut(board.GP0)
-                self.i2c = busio.I2C(scl, sda)
-                logger.debug("Initialized I2C using GPIO 1 (SCL) and GPIO 0 (SDA)")
+                self.i2c = busio.I2C(scl, sda, frequency=100000)
+                logger.info("Initialized I2C using GPIO 1 (SCL) and GPIO 0 (SDA)")
             except (ValueError, RuntimeError, AttributeError) as e:
                 logger.debug(f"I2C init with GP1/GP0 failed: {e}")
 
+        # Method 5: Try using board.SCL/SDA as last resort
+        if self.i2c is None:
+            try:
+                self.i2c = busio.I2C(board.SCL, board.SDA)
+                logger.info("Initialized I2C using board.SCL/SDA")
+            except (ValueError, RuntimeError, AttributeError) as e:
+                logger.debug(f"I2C init with board.SCL/SDA failed: {e}")
+
         if self.i2c is None:
             error_msg = (
-                "Failed to initialize I2C. Valid I2C ports: ((1, 3, 2), (0, 1, 0)). "
-                "Make sure I2C is enabled in /boot/config.txt (dtparam=i2c_arm=on) "
-                "and the display is properly connected."
+                "Failed to initialize I2C after trying multiple methods. "
+                "Valid I2C ports reported: ((1, 3, 2), (0, 1, 0)).\n"
+                "Troubleshooting steps:\n"
+                "1. Verify I2C is enabled: sudo raspi-config -> Interface Options -> I2C -> Enable\n"
+                "2. Check /boot/config.txt contains: dtparam=i2c_arm=on\n"
+                "3. Verify display is connected: sudo i2cdetect -y 1\n"
+                "4. Reboot after enabling I2C: sudo reboot\n"
+                "5. If display is not needed, set ENABLE_DISPLAY=false in config"
             )
             logger.error(error_msg)
             raise RuntimeError(error_msg)

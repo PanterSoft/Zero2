@@ -47,9 +47,50 @@ cp systemd/bt-nap.service /etc/systemd/system/
 systemctl daemon-reload
 echo "  Services reloaded"
 
+# Check and enable I2C if display is enabled
+if [ -f "config/zero2.conf" ]; then
+    ENABLE_DISPLAY=$(grep "^ENABLE_DISPLAY=" config/zero2.conf | cut -d'=' -f2 | tr -d ' ' | tr '[:upper:]' '[:lower:]')
+    if [ "$ENABLE_DISPLAY" = "true" ] || [ "$ENABLE_DISPLAY" = "1" ] || [ "$ENABLE_DISPLAY" = "yes" ] || [ "$ENABLE_DISPLAY" = "on" ]; then
+        echo "Checking I2C configuration..."
+
+        # Check if I2C is enabled
+        I2C_ENABLED=false
+        if grep -q "^dtparam=i2c_arm=on" /boot/config.txt; then
+            I2C_ENABLED=true
+            echo "  I2C already enabled in /boot/config.txt"
+        elif grep -q "^dtparam=i2c_arm=off" /boot/config.txt; then
+            sed -i 's/^dtparam=i2c_arm=off/dtparam=i2c_arm=on/' /boot/config.txt
+            I2C_ENABLED=true
+            echo "  Changed dtparam=i2c_arm=off to dtparam=i2c_arm=on"
+        elif grep -q "^#dtparam=i2c_arm=" /boot/config.txt; then
+            sed -i 's/^#dtparam=i2c_arm=.*/dtparam=i2c_arm=on/' /boot/config.txt
+            I2C_ENABLED=true
+            echo "  Uncommented and enabled I2C in /boot/config.txt"
+        fi
+
+        # If I2C is not enabled yet, add it
+        if [ "$I2C_ENABLED" = false ]; then
+            echo "dtparam=i2c_arm=on" >> /boot/config.txt
+            echo "  Added dtparam=i2c_arm=on to /boot/config.txt"
+        fi
+
+        # Load I2C kernel module
+        modprobe i2c-dev 2>/dev/null || echo "  Warning: Could not load i2c-dev module"
+
+        # Verify I2C is accessible
+        if [ -e /dev/i2c-1 ] || [ -e /dev/i2c-0 ]; then
+            echo "  I2C device files found - I2C should be working"
+        else
+            echo "  Warning: I2C device files not found. A reboot may be required."
+        fi
+    fi
+fi
+
 echo ""
 echo "Update complete!"
 echo "To enable newly updated services:"
 echo "  sudo systemctl enable zero2-controller.service"
 echo "  sudo systemctl enable bt-nap.service"
 echo "  sudo systemctl restart zero2-controller.service"
+echo ""
+echo "Note: If I2C was just enabled, a reboot may be required: sudo reboot"
