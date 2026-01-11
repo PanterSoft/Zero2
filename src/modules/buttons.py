@@ -25,10 +25,10 @@ class ButtonHandler:
     # Note: Pin mappings corrected based on actual hardware behavior
     BUTTON_A_PIN = 5
     BUTTON_B_PIN = 6
-    DPAD_UP_PIN = 27      # GPIO 27 is actually UP
-    DPAD_DOWN_PIN = 23    # GPIO 23 is actually DOWN
-    DPAD_LEFT_PIN = 17    # GPIO 17 is actually LEFT
-    DPAD_RIGHT_PIN = 22   # GPIO 22 is actually RIGHT
+    DPAD_UP_PIN = 22      # GPIO 22 is actually UP (was mapped to LEFT)
+    DPAD_DOWN_PIN = 17    # GPIO 17 is actually DOWN (was mapped to LEFT, triggers RIGHT)
+    DPAD_LEFT_PIN = 23    # GPIO 23 is actually LEFT (was mapped to DOWN)
+    DPAD_RIGHT_PIN = 27   # GPIO 27 is actually RIGHT (was mapped to UP)
     DPAD_SELECT_PIN = 4
 
     def __init__(self):
