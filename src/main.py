@@ -3,7 +3,6 @@ import signal
 import sys
 from modules.display import DisplayManager
 from modules.power import PowerManager
-from modules.network import NetworkManagerController
 
 def signal_handler(sig, frame):
     print("Exiting...")
@@ -27,14 +26,7 @@ def main():
     power = PowerManager()
     power.start_monitoring()
 
-    # 3. Network Management (Single pass check on boot)
-    network = NetworkManagerController()
-    try:
-        network.manage()
-    except Exception as e:
-        print(f"Network management error: {e}")
-
-    # 4. Main Loop
+    # 3. Main Loop
     while True:
         try:
             if display:

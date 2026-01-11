@@ -1,49 +1,45 @@
-import time
 import subprocess
 import os
+from pathlib import Path
+
 
 class NetworkManagerController:
-    def __init__(self, check_interval=60):
-        self.check_interval = check_interval
-        self.ap_mode = False
+    """
+    Thin wrapper to call the modular helper scripts deployed to /usr/local/bin/zero2.
+    This replaces the old nmcli-based logic.
+    """
 
-    def check_connection(self):
-        # Check if connected to any wifi
-        try:
-            output = subprocess.check_output("nmcli -t -f TYPE,STATE connection show --active", shell=True).decode()
-            if "802-11-wireless:activated" in output:
-                return True
-        except:
-            pass
-        return False
+    def __init__(self, scripts_dir: str = "/usr/local/bin/zero2"):
+        self.scripts_dir = Path(scripts_dir)
 
-    def create_hotspot_profile(self):
-        # Check if Hotspot profile exists
-        try:
-            subprocess.check_output("nmcli connection show Hotspot", shell=True)
-        except subprocess.CalledProcessError:
-            print("Creating Hotspot profile...")
-            # Create Hotspot
-            cmd = "nmcli con add type wifi ifname wlan0 con-name Hotspot autoconnect no ssid Zero2-Setup"
-            subprocess.run(cmd, shell=True)
-            subprocess.run("nmcli con modify Hotspot 802-11-wireless.mode ap 802-11-wireless.band bg ipv4.method shared", shell=True)
-            subprocess.run("nmcli con modify Hotspot wifi-sec.key-mgmt wpa-psk wifi-sec.psk zero2setup", shell=True)
+    def _run(self, script_name: str):
+        script_path = self.scripts_dir / script_name
+        if not script_path.exists():
+            raise FileNotFoundError(f"Helper script not found: {script_path}")
+        subprocess.run([str(script_path)], check=True)
 
-    def start_hotspot(self):
-        print("Starting Hotspot...")
-        subprocess.run("nmcli connection up Hotspot", shell=True)
-        self.ap_mode = True
+    # Hotspot controls
+    def enable_hotspot(self):
+        self._run("enable-hotspot.sh")
 
-    def manage(self):
-        self.create_hotspot_profile()
+    def disable_hotspot(self):
+        self._run("disable-hotspot.sh")
 
-        # Give system time to connect on boot
-        print("Waiting for network connection...")
-        time.sleep(20) # wait for NM to try auto-connect
+    # Bluetooth PAN controls
+    def enable_bt_pan(self):
+        self._run("enable-bt-pan.sh")
 
-        if not self.check_connection():
-            print("No WiFi connection found. Switching to Hotspot mode.")
-            self.start_hotspot()
-        else:
-            print("WiFi Connected.")
+    def disable_bt_pan(self):
+        self._run("disable-bt-pan.sh")
+
+    # USB gadget controls
+    def enable_usb_gadget(self):
+        self._run("enable-usb-ether.sh")
+
+    def disable_usb_gadget(self):
+        self._run("disable-usb-ether.sh")
+
+    # Repo update
+    def update_repo(self):
+        self._run("update-repo.sh")
 

@@ -99,7 +99,21 @@ iface bnep0 inet static
 EOF
 fi
 
-# 4. Setup Python Environment
+# 4. Install helper scripts (hotspot / BT PAN / USB gadget / update)
+echo "Installing helper scripts..."
+mkdir -p /usr/local/bin/zero2
+for script in \
+    scripts/enable-hotspot.sh \
+    scripts/disable-hotspot.sh \
+    scripts/enable-bt-pan.sh \
+    scripts/disable-bt-pan.sh \
+    scripts/enable-usb-ether.sh \
+    scripts/disable-usb-ether.sh \
+    scripts/update-repo.sh; do
+    install -m 755 "$script" /usr/local/bin/zero2/
+done
+
+# 5. Setup Python Environment
 echo "Setting up Python Environment..."
 if [ ! -d "venv" ]; then
     python3 -m venv venv
@@ -107,7 +121,7 @@ fi
 
 ./venv/bin/pip install -r requirements.txt
 
-# 5. Enable I2C for Display
+# 6. Enable I2C for Display
 if [ "$ENABLE_DISPLAY" = true ]; then
     echo "Enabling I2C..."
     if ! grep -q "dtparam=i2c_arm=on" /boot/config.txt; then
@@ -122,7 +136,7 @@ if ! grep -q "gpu_mem=" /boot/config.txt; then
     echo "gpu_mem=16" >> /boot/config.txt
 fi
 
-# 6. Install Systemd Services
+# 7. Install Systemd Services
 echo "Installing Systemd Services..."
 cp systemd/zero2-controller.service /etc/systemd/system/
 if [ "$ENABLE_SSH_BT" = true ]; then
@@ -133,7 +147,7 @@ fi
 systemctl daemon-reload
 #systemctl enable zero2-controller.service
 
-# 7. Apply Overclocking
+# 8. Apply Overclocking
 if [ "$OVERCLOCK_PROFILE" != "none" ]; then
     echo "Applying Overclock Profile: $OVERCLOCK_PROFILE"
 
