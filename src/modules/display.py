@@ -148,8 +148,9 @@ class DisplayManager:
         self.warning_timeout = None
 
         # Menu bar height (top status bar)
+        # 128x64 display: menu bar uses 12px, content area is 13-64 (51px available)
         self.menu_bar_height = 12
-        self.content_start_y = self.menu_bar_height + 1
+        self.content_start_y = self.menu_bar_height + 2  # Add extra spacing to avoid overlap
 
         # Cache for status info (update less frequently)
         self.status_cache = {}
@@ -319,12 +320,13 @@ class DisplayManager:
                 self.draw.rectangle([x+1, y+3, x+1+fill_width, y+7], outline=255, fill=255)
 
             # Percentage text (small, next to icon) - ensure it fits
-            text_x = x + 17
-            if text_x + 20 < self.width:  # Check if text fits
-                self.draw.text((text_x, y+1), f"{percentage}%", font=self.font, fill=255)
+            text_x = x + 16
+            if text_x + 15 < self.width:  # Check if text fits (max 15px for "100%")
+                percent_str = f"{percentage}%"[:4]  # Max 4 chars
+                self.draw.text((text_x, y+1), percent_str, font=self.font, fill=255)
         else:
             # Show "?" if battery status unavailable
-            text_x = x + 17
+            text_x = x + 16
             if text_x + 5 < self.width:  # Check if text fits
                 self.draw.text((text_x, y+1), "?", font=self.font, fill=255)
 
@@ -503,7 +505,12 @@ class DisplayManager:
     def _draw_dashboard(self):
         """Draw compact dashboard with more information."""
         y_offset = self.content_start_y
-        line_height = 11  # Reduced line height for more compact display
+        line_height = 10  # Reduced line height to fit 4 lines in 51px (13-64)
+
+        # Available width: 128px, leave 2px margin on each side = 124px usable
+        # Split into two columns: left 60px, right 64px (with 2px gap)
+        left_col_x = 2
+        right_col_x = 64
 
         # Get system info
         try:
@@ -543,46 +550,56 @@ class DisplayManager:
         # Draw compact dashboard (4 lines of info)
         y = y_offset
 
-        # Line 1: IP and CPU (compact)
-        self.draw.text((2, y), f"IP:{IP[:12]}", font=self.font, fill=255)
-        self.draw.text((70, y), f"CPU:{CPU_load}", font=self.font, fill=255)
+        # Line 1: IP (left) and CPU (right)
+        ip_text = f"IP:{IP[:10]}"  # Max 10 chars to fit in 60px
+        cpu_text = f"CPU:{CPU_load[:5]}"  # Max 5 chars
+        self.draw.text((left_col_x, y), ip_text, font=self.font, fill=255)
+        self.draw.text((right_col_x, y), cpu_text, font=self.font, fill=255)
         y += line_height
 
-        # Line 2: Memory and Disk (compact)
-        self.draw.text((2, y), f"Mem:{MemUsage}MB", font=self.font, fill=255)
-        self.draw.text((70, y), f"Disk:{DiskUsage}", font=self.font, fill=255)
+        # Line 2: Memory (left) and Disk (right)
+        mem_text = f"M:{MemUsage[:8]}"  # Truncate to fit
+        disk_text = f"D:{DiskUsage[:6]}"  # Truncate to fit
+        self.draw.text((left_col_x, y), mem_text, font=self.font, fill=255)
+        self.draw.text((right_col_x, y), disk_text, font=self.font, fill=255)
         y += line_height
 
-        # Line 3: WiFi usage (if available)
+        # Line 3: WiFi usage (full width, truncated)
         wlan_stats = self.network_stats_cache.get('wlan0_usage')
         if wlan_stats:
-            rx_rate = self._format_bytes(wlan_stats['rx']) + '/s'
-            tx_rate = self._format_bytes(wlan_stats['tx']) + '/s'
-            self.draw.text((2, y), f"WiFi:↓{rx_rate} ↑{tx_rate}", font=self.font, fill=255)
+            rx_rate = self._format_bytes(wlan_stats['rx'])
+            tx_rate = self._format_bytes(wlan_stats['tx'])
+            wifi_text = f"WiFi:↓{rx_rate[:6]}/s ↑{tx_rate[:6]}/s"
+            wifi_text = wifi_text[:24]  # Ensure fits in 124px width
+            self.draw.text((left_col_x, y), wifi_text, font=self.font, fill=255)
         else:
-            self.draw.text((2, y), "WiFi: N/A", font=self.font, fill=255)
+            self.draw.text((left_col_x, y), "WiFi: N/A", font=self.font, fill=255)
         y += line_height
 
-        # Line 4: Ethernet usage (if available)
+        # Line 4: Ethernet/USB usage (full width, truncated)
         eth_stats = self.network_stats_cache.get('eth0_usage')
         if eth_stats:
-            rx_rate = self._format_bytes(eth_stats['rx']) + '/s'
-            tx_rate = self._format_bytes(eth_stats['tx']) + '/s'
-            self.draw.text((2, y), f"Eth:↓{rx_rate} ↑{tx_rate}", font=self.font, fill=255)
+            rx_rate = self._format_bytes(eth_stats['rx'])
+            tx_rate = self._format_bytes(eth_stats['tx'])
+            eth_text = f"Eth:↓{rx_rate[:6]}/s ↑{tx_rate[:6]}/s"
+            eth_text = eth_text[:24]  # Ensure fits in 124px width
+            self.draw.text((left_col_x, y), eth_text, font=self.font, fill=255)
         else:
             # Show USB0 if eth0 not available
             usb_stats = self.network_stats_cache.get('usb0_usage')
             if usb_stats:
-                rx_rate = self._format_bytes(usb_stats['rx']) + '/s'
-                tx_rate = self._format_bytes(usb_stats['tx']) + '/s'
-                self.draw.text((2, y), f"USB:↓{rx_rate} ↑{tx_rate}", font=self.font, fill=255)
+                rx_rate = self._format_bytes(usb_stats['rx'])
+                tx_rate = self._format_bytes(usb_stats['tx'])
+                usb_text = f"USB:↓{rx_rate[:6]}/s ↑{tx_rate[:6]}/s"
+                usb_text = usb_text[:24]  # Ensure fits in 124px width
+                self.draw.text((left_col_x, y), usb_text, font=self.font, fill=255)
             else:
-                self.draw.text((2, y), "Eth: N/A", font=self.font, fill=255)
+                self.draw.text((left_col_x, y), "Eth: N/A", font=self.font, fill=255)
 
     def _draw_network_menu(self):
         """Draw network information menu."""
         y_offset = self.content_start_y
-        line_height = 11
+        line_height = 10  # Reduced to fit more lines
 
         y = y_offset
 
@@ -606,30 +623,35 @@ class DisplayManager:
             eth_ip = "N/A"
             usb_ip = "N/A"
 
-        # Display network information
-        self.draw.text((2, y), "Network Info", font=self.font, fill=255)
+        # Display network information (truncate to fit)
+        self.draw.text((2, y), "Network", font=self.font, fill=255)
         y += line_height
 
-        self.draw.text((2, y), f"WiFi: {wlan_ip}", font=self.font, fill=255)
+        wifi_text = f"WiFi:{wlan_ip[:14]}"  # Max 20 chars total
+        self.draw.text((2, y), wifi_text[:20], font=self.font, fill=255)
         y += line_height
 
-        self.draw.text((2, y), f"Eth: {eth_ip}", font=self.font, fill=255)
+        eth_text = f"Eth:{eth_ip[:15]}"
+        self.draw.text((2, y), eth_text[:20], font=self.font, fill=255)
         y += line_height
 
-        self.draw.text((2, y), f"USB: {usb_ip}", font=self.font, fill=255)
+        usb_text = f"USB:{usb_ip[:15]}"
+        self.draw.text((2, y), usb_text[:20], font=self.font, fill=255)
         y += line_height
 
-        # Show network usage totals
-        wlan_stats = self.network_stats_cache.get('wlan0_usage')
-        if wlan_stats:
-            rx_total = self._format_bytes(wlan_stats['rx_total'])
-            tx_total = self._format_bytes(wlan_stats['tx_total'])
-            self.draw.text((2, y), f"WiFi: ↓{rx_total} ↑{tx_total}", font=self.font, fill=255)
+        # Show network usage totals (if space allows)
+        if y + line_height <= self.height:
+            wlan_stats = self.network_stats_cache.get('wlan0_usage')
+            if wlan_stats:
+                rx_total = self._format_bytes(wlan_stats['rx_total'])
+                tx_total = self._format_bytes(wlan_stats['tx_total'])
+                usage_text = f"WiFi:↓{rx_total[:8]} ↑{tx_total[:8]}"
+                self.draw.text((2, y), usage_text[:24], font=self.font, fill=255)
 
     def _draw_system_menu(self):
         """Draw system information menu."""
         y_offset = self.content_start_y
-        line_height = 11
+        line_height = 10  # Reduced to fit more lines
 
         y = y_offset
 
@@ -657,42 +679,48 @@ class DisplayManager:
             cpu_freq = "N/A"
             load_avg = "N/A"
 
-        self.draw.text((2, y), "System Info", font=self.font, fill=255)
+        self.draw.text((2, y), "System", font=self.font, fill=255)
         y += line_height
 
-        self.draw.text((2, y), f"Uptime: {uptime[:15]}", font=self.font, fill=255)
+        uptime_text = f"Up:{uptime[:18]}"
+        self.draw.text((2, y), uptime_text[:22], font=self.font, fill=255)
         y += line_height
 
-        self.draw.text((2, y), f"Temp: {temp}", font=self.font, fill=255)
+        temp_text = f"Tmp:{temp[:6]}"
+        self.draw.text((2, y), temp_text[:22], font=self.font, fill=255)
         y += line_height
 
-        self.draw.text((2, y), f"CPU: {cpu_freq}MHz", font=self.font, fill=255)
+        freq_text = f"CPU:{cpu_freq[:6]}MHz"
+        self.draw.text((2, y), freq_text[:22], font=self.font, fill=255)
         y += line_height
 
-        self.draw.text((2, y), f"Load: {load_avg}", font=self.font, fill=255)
+        load_text = f"Load:{load_avg[:6]}"
+        self.draw.text((2, y), load_text[:22], font=self.font, fill=255)
 
     def _draw_power_menu(self):
         """Draw power information menu."""
         y_offset = self.content_start_y
-        line_height = 11
+        line_height = 10  # Reduced to fit more lines
 
         y = y_offset
 
         battery_status = self.status_cache.get('battery')
 
-        self.draw.text((2, y), "Power Info", font=self.font, fill=255)
+        self.draw.text((2, y), "Power", font=self.font, fill=255)
         y += line_height
 
         if battery_status is not None:
-            self.draw.text((2, y), f"Battery: {battery_status}%", font=self.font, fill=255)
+            bat_text = f"Bat:{battery_status}%"
+            self.draw.text((2, y), bat_text[:22], font=self.font, fill=255)
         else:
-            self.draw.text((2, y), "Battery: N/A", font=self.font, fill=255)
+            self.draw.text((2, y), "Bat:N/A", font=self.font, fill=255)
         y += line_height
 
         # Voltage (if available)
         try:
             cmd = "vcgencmd measure_volts core | cut -d'=' -f2"
             voltage = subprocess.check_output(cmd, shell=True).decode("utf-8").strip() or "N/A"
-            self.draw.text((2, y), f"Voltage: {voltage}", font=self.font, fill=255)
+            volt_text = f"Volt:{voltage[:6]}"
+            self.draw.text((2, y), volt_text[:22], font=self.font, fill=255)
         except:
             pass
