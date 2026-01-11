@@ -5,7 +5,15 @@ from modules.logger import get_logger
 
 logger = get_logger(__name__)
 
-CONFIG_FILE = Path("/opt/zero2_controller/config/zero2.conf")
+# Support development mode: check for local config first, then system config
+DEV_CONFIG_FILE = Path(__file__).parent.parent.parent / "config" / "zero2.conf"
+SYSTEM_CONFIG_FILE = Path("/opt/zero2_controller/config/zero2.conf")
+
+# Use local config if it exists (development), otherwise use system config
+if DEV_CONFIG_FILE.exists() and os.environ.get("ZERO2_USE_SYSTEM_CONFIG") != "1":
+    CONFIG_FILE = DEV_CONFIG_FILE
+else:
+    CONFIG_FILE = SYSTEM_CONFIG_FILE
 
 # Default configuration values
 DEFAULT_CONFIG = {

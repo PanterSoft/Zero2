@@ -1,8 +1,10 @@
 import logging
 import logging.handlers
 import os
+import sys
 from pathlib import Path
 
+# Always use the same log file location
 LOG_DIR = Path("/var/log")
 LOG_FILE = LOG_DIR / "zero2-controller.log"
 MAX_BYTES = 10 * 1024 * 1024  # 10 MB
@@ -43,8 +45,8 @@ def setup_logger(name="zero2_controller", log_level=logging.INFO):
     )
     file_handler.setFormatter(file_format)
 
-    # Console handler (for systemd journal)
-    console_handler = logging.StreamHandler()
+    # Console handler (for terminal output and systemd journal)
+    console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(log_level)
     console_format = logging.Formatter(
         '%(asctime)s - %(levelname)s - %(message)s',
