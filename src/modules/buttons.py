@@ -35,7 +35,7 @@ class ButtonHandler:
         self.buttons = {}
         self.button_callbacks = {}
         self.last_press_time = {}
-        self.debounce_time = 0.1  # 100ms debounce
+        self.debounce_time = 0.05  # 50ms debounce (reduced for faster response)
         self.callback_lock = threading.Lock()
         self.running = True
 
@@ -127,12 +127,14 @@ class ButtonHandler:
         """Execute callback in a separate thread to avoid blocking."""
         def run_callback():
             try:
+                # Execute callback immediately (non-blocking for main loop)
                 callback()
                 logger.debug(f"Button {button_name} pressed - callback executed")
             except Exception as e:
                 logger.error(f"Error in button {button_name} callback: {e}", exc_info=True)
 
-        thread = threading.Thread(target=run_callback, daemon=True)
+        # Start callback in background thread (non-blocking)
+        thread = threading.Thread(target=run_callback, daemon=True, name=f"Button-{button_name}")
         thread.start()
 
     def check_buttons(self):

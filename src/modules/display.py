@@ -1,4 +1,5 @@
 import time
+import threading
 import subprocess
 import board
 import busio
@@ -153,6 +154,9 @@ class DisplayManager:
         self.status_cache = {}
         self.status_cache_time = 0
         self.status_cache_interval = 5  # Update status every 5 seconds
+
+        # Thread lock for display updates (ensure thread safety)
+        self.display_lock = threading.Lock()
 
     def _get_battery_status(self):
         """Get battery percentage if available."""
@@ -383,60 +387,65 @@ class DisplayManager:
         if timeout:
             self.warning_timeout = time.time() + timeout
 
+        # Immediately update display to show warning (don't wait for next interval)
+        self.update_info()
+
     def clear_warning(self):
         """Clear the warning message."""
         self.warning_message = None
         self.warning_timeout = None
 
     def update_info(self):
-        # Draw a black filled box to clear the image.
-        self.draw.rectangle((0, 0, self.width, self.height), outline=0, fill=0)
+        # Thread-safe display update (entire method protected)
+        with self.display_lock:
+            # Draw a black filled box to clear the image.
+            self.draw.rectangle((0, 0, self.width, self.height), outline=0, fill=0)
 
-        # Draw menu bar with status icons
-        self._draw_menu_bar()
+            # Draw menu bar with status icons
+            self._draw_menu_bar()
 
-        # Check if warning should be displayed
-        if self.warning_message:
-            if self.warning_timeout and time.time() > self.warning_timeout:
-                self.clear_warning()
-            else:
-                # Display warning message (split across lines if needed)
-                # Start below menu bar
-                lines = self.warning_message.split('\n')
-                for i, line in enumerate(lines[:4]):  # Max 4 lines
-                    y_pos = self.content_start_y + (i * 14)
-                    if y_pos < self.height:
-                        self.draw.text((2, y_pos), line[:20], font=self.font, fill=255)
+            # Check if warning should be displayed
+            if self.warning_message:
+                if self.warning_timeout and time.time() > self.warning_timeout:
+                    self.clear_warning()
+                else:
+                    # Display warning message (split across lines if needed)
+                    # Start below menu bar
+                    lines = self.warning_message.split('\n')
+                    for i, line in enumerate(lines[:4]):  # Max 4 lines
+                        y_pos = self.content_start_y + (i * 14)
+                        if y_pos < self.height:
+                            self.draw.text((2, y_pos), line[:20], font=self.font, fill=255)
 
-                # Display image and return early
-                self.disp.image(self.image)
-                self.disp.show()
-                return
+                    # Display image and return early
+                    self.disp.image(self.image)
+                    self.disp.show()
+                    return
 
-        # Shell scripts for system monitoring from here:
-        # https://unix.stackexchange.com/questions/119126/command-to-display-memory-usage-disk-usage-and-cpu-load
-        try:
-            cmd = "hostname -I | cut -d' ' -f1"
-            IP = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-            cmd = "top -bn1 | grep load | awk '{printf \"CPU: %.2f\", $(NF-2)}'"
-            CPU = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-            cmd = "free -m | awk 'NR==2{printf \"Mem: %s/%sMB\", $3,$2}'"
-            MemUsage = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-        except Exception as e:
-            logger.warning(f"Failed to get system info: {e}")
-            IP = "N/A"
-            CPU = "N/A"
-            MemUsage = "N/A"
+            # Shell scripts for system monitoring from here:
+            # https://unix.stackexchange.com/questions/119126/command-to-display-memory-usage-disk-usage-and-cpu-load
+            try:
+                cmd = "hostname -I | cut -d' ' -f1"
+                IP = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
+                cmd = "top -bn1 | grep load | awk '{printf \"CPU: %.2f\", $(NF-2)}'"
+                CPU = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
+                cmd = "free -m | awk 'NR==2{printf \"Mem: %s/%sMB\", $3,$2}'"
+                MemUsage = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
+            except Exception as e:
+                logger.warning(f"Failed to get system info: {e}")
+                IP = "N/A"
+                CPU = "N/A"
+                MemUsage = "N/A"
 
-        # Write operations (starting below menu bar)
-        y_offset = self.content_start_y
-        line_height = 13
+            # Write operations (starting below menu bar)
+            y_offset = self.content_start_y
+            line_height = 13
 
-        self.draw.text((2, y_offset), f"IP: {IP}", font=self.font, fill=255)
-        self.draw.text((2, y_offset + line_height), CPU, font=self.font, fill=255)
-        self.draw.text((2, y_offset + (line_height * 2)), MemUsage, font=self.font, fill=255)
-        self.draw.text((2, y_offset + (line_height * 3)), "Zero2 Controller", font=self.font, fill=255)
+            self.draw.text((2, y_offset), f"IP: {IP}", font=self.font, fill=255)
+            self.draw.text((2, y_offset + line_height), CPU, font=self.font, fill=255)
+            self.draw.text((2, y_offset + (line_height * 2)), MemUsage, font=self.font, fill=255)
+            self.draw.text((2, y_offset + (line_height * 3)), "Zero2 Controller", font=self.font, fill=255)
 
-        # Display image.
-        self.disp.image(self.image)
-        self.disp.show()
+            # Display image.
+            self.disp.image(self.image)
+            self.disp.show()

@@ -114,6 +114,7 @@ def main():
                 last_button_check = current_time
 
             # Update display at configured interval (independent of button checks)
+            # Note: Warnings trigger immediate updates via show_warning()
             if display and (current_time - last_display_update) >= display_interval:
                 display.update_info()
                 last_display_update = current_time
