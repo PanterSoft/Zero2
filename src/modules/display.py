@@ -5,7 +5,7 @@ import busio
 from PIL import Image, ImageDraw, ImageFont
 import adafruit_ssd1306
 from modules.logger import get_logger
-from modules.config import get_config
+from modules.config import get_config, read_config
 
 logger = get_logger(__name__)
 
@@ -145,6 +145,165 @@ class DisplayManager:
         self.warning_message = None
         self.warning_timeout = None
 
+        # Menu bar height (top status bar)
+        self.menu_bar_height = 12
+        self.content_start_y = self.menu_bar_height + 1
+
+        # Cache for status info (update less frequently)
+        self.status_cache = {}
+        self.status_cache_time = 0
+        self.status_cache_interval = 5  # Update status every 5 seconds
+
+    def _get_battery_status(self):
+        """Get battery percentage if available."""
+        try:
+            # Try reading from sysfs (common for power management ICs)
+            # This is a placeholder - adjust based on your hardware
+            with open('/sys/class/power_supply/battery/capacity', 'r') as f:
+                return int(f.read().strip())
+        except (FileNotFoundError, ValueError, IOError):
+            # Try alternative paths or methods
+            try:
+                # Some systems use different paths
+                with open('/sys/class/power_supply/BAT0/capacity', 'r') as f:
+                    return int(f.read().strip())
+            except (FileNotFoundError, ValueError, IOError):
+                # Battery info not available
+                return None
+
+    def _get_wifi_status(self):
+        """Check if WiFi is enabled/connected."""
+        config = read_config()
+        if not config.get('ENABLE_WIFI_HOTSPOT', False):
+            return None
+
+        try:
+            # Check if WiFi interface exists and is up
+            result = subprocess.run(
+                ['ip', 'link', 'show', 'wlan0'],
+                capture_output=True,
+                text=True,
+                timeout=1
+            )
+            if result.returncode == 0 and 'state UP' in result.stdout:
+                # Check if connected to network
+                result = subprocess.run(
+                    ['iwgetid', '-r'],
+                    capture_output=True,
+                    text=True,
+                    timeout=1
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    return 'connected'
+                return 'enabled'
+            return 'disabled'
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return None
+
+    def _get_bluetooth_status(self):
+        """Check if Bluetooth is enabled."""
+        config = read_config()
+        if not config.get('ENABLE_SSH_BT', False):
+            return None
+
+        try:
+            result = subprocess.run(
+                ['systemctl', 'is-active', 'bluetooth'],
+                capture_output=True,
+                text=True,
+                timeout=1
+            )
+            if result.returncode == 0 and 'active' in result.stdout:
+                return 'enabled'
+            return 'disabled'
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return None
+
+    def _draw_battery_icon(self, x, y, percentage=None):
+        """Draw a simple battery icon."""
+        # Battery outline: 16x8 pixels
+        # Outer rectangle
+        self.draw.rectangle([x, y+2, x+14, y+8], outline=255, fill=0)
+        # Positive terminal
+        self.draw.rectangle([x+14, y+4, x+16, y+6], outline=255, fill=255)
+
+        if percentage is not None:
+            # Fill level (12 pixels wide for the fill area)
+            fill_width = int(12 * percentage / 100)
+            if fill_width > 0:
+                self.draw.rectangle([x+1, y+3, x+1+fill_width, y+7], outline=255, fill=255)
+
+            # Percentage text (small, next to icon)
+            self.draw.text((x+18, y+1), f"{percentage}%", font=self.font, fill=255)
+        else:
+            # Show "?" if battery status unavailable
+            self.draw.text((x+18, y+1), "?", font=self.font, fill=255)
+
+    def _draw_wifi_icon(self, x, y, status=None):
+        """Draw a simple WiFi icon."""
+        if status == 'connected':
+            # Connected: show signal bars
+            # Signal bars (3 bars)
+            self.draw.arc([x, y+4, x+6, y+10], start=180, end=0, fill=255)  # Outer arc
+            self.draw.arc([x+2, y+6, x+4, y+8], start=180, end=0, fill=255)  # Inner arc
+            self.draw.point([x+3, y+7], fill=255)  # Center dot
+        elif status == 'enabled':
+            # Enabled but not connected: show outline
+            self.draw.arc([x, y+4, x+6, y+10], start=180, end=0, outline=255)
+        else:
+            # Disabled: show X
+            self.draw.line([x, y+4, x+6, y+10], fill=255)
+            self.draw.line([x+6, y+4, x, y+10], fill=255)
+
+    def _draw_bluetooth_icon(self, x, y, status=None):
+        """Draw a simple Bluetooth icon."""
+        if status == 'enabled':
+            # Bluetooth symbol (simplified)
+            # Top triangle
+            self.draw.polygon([(x+3, y+2), (x+6, y+5), (x+3, y+8)], outline=255, fill=0)
+            # Bottom triangle
+            self.draw.polygon([(x+3, y+6), (x+6, y+9), (x+3, y+10)], outline=255, fill=0)
+            # Center line
+            self.draw.line([x+3, y+2, x+3, y+10], fill=255)
+        else:
+            # Disabled: show X
+            self.draw.line([x, y+2, x+6, y+10], fill=255)
+            self.draw.line([x+6, y+2, x, y+10], fill=255)
+
+    def _draw_menu_bar(self):
+        """Draw the top menu bar with status icons."""
+        # Draw menu bar background
+        self.draw.rectangle([0, 0, self.width-1, self.menu_bar_height], outline=255, fill=0)
+
+        # Draw separator line below menu bar
+        self.draw.line([0, self.menu_bar_height, self.width, self.menu_bar_height], fill=255)
+
+        x = 2  # Start position for icons
+
+        # Update status cache if needed
+        current_time = time.time()
+        if current_time - self.status_cache_time > self.status_cache_interval:
+            self.status_cache['battery'] = self._get_battery_status()
+            self.status_cache['wifi'] = self._get_wifi_status()
+            self.status_cache['bluetooth'] = self._get_bluetooth_status()
+            self.status_cache_time = current_time
+
+        # Battery icon (leftmost)
+        self._draw_battery_icon(x, 2, self.status_cache.get('battery'))
+        x += 40  # Move right (battery icon + text)
+
+        # WiFi icon
+        wifi_status = self.status_cache.get('wifi')
+        if wifi_status is not None:
+            self._draw_wifi_icon(x, 2, wifi_status)
+            x += 10
+
+        # Bluetooth icon
+        bt_status = self.status_cache.get('bluetooth')
+        if bt_status is not None:
+            self._draw_bluetooth_icon(x, 2, bt_status)
+            x += 10
+
     def show_warning(self, message, timeout=None):
         """
         Display a warning message on the OLED.
@@ -167,17 +326,21 @@ class DisplayManager:
         # Draw a black filled box to clear the image.
         self.draw.rectangle((0, 0, self.width, self.height), outline=0, fill=0)
 
+        # Draw menu bar with status icons
+        self._draw_menu_bar()
+
         # Check if warning should be displayed
         if self.warning_message:
             if self.warning_timeout and time.time() > self.warning_timeout:
                 self.clear_warning()
             else:
                 # Display warning message (split across lines if needed)
+                # Start below menu bar
                 lines = self.warning_message.split('\n')
                 for i, line in enumerate(lines[:4]):  # Max 4 lines
-                    y_pos = i * 16
+                    y_pos = self.content_start_y + (i * 14)
                     if y_pos < self.height:
-                        self.draw.text((0, y_pos), line[:20], font=self.font, fill=255)
+                        self.draw.text((2, y_pos), line[:20], font=self.font, fill=255)
 
                 # Display image and return early
                 self.disp.image(self.image)
@@ -189,9 +352,9 @@ class DisplayManager:
         try:
             cmd = "hostname -I | cut -d' ' -f1"
             IP = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-            cmd = "top -bn1 | grep load | awk '{printf \"CPU Load: %.2f\", $(NF-2)}'"
+            cmd = "top -bn1 | grep load | awk '{printf \"CPU: %.2f\", $(NF-2)}'"
             CPU = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-            cmd = "free -m | awk 'NR==2{printf \"Mem: %s/%s MB\", $3,$2}'"
+            cmd = "free -m | awk 'NR==2{printf \"Mem: %s/%sMB\", $3,$2}'"
             MemUsage = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
         except Exception as e:
             logger.warning(f"Failed to get system info: {e}")
@@ -199,11 +362,14 @@ class DisplayManager:
             CPU = "N/A"
             MemUsage = "N/A"
 
-        # Write operations
-        self.draw.text((0, 0), "IP: " + IP, font=self.font, fill=255)
-        self.draw.text((0, 16), CPU, font=self.font, fill=255)
-        self.draw.text((0, 32), MemUsage, font=self.font, fill=255)
-        self.draw.text((0, 48), "Zero2 Controller", font=self.font, fill=255)
+        # Write operations (starting below menu bar)
+        y_offset = self.content_start_y
+        line_height = 13
+
+        self.draw.text((2, y_offset), f"IP: {IP}", font=self.font, fill=255)
+        self.draw.text((2, y_offset + line_height), CPU, font=self.font, fill=255)
+        self.draw.text((2, y_offset + (line_height * 2)), MemUsage, font=self.font, fill=255)
+        self.draw.text((2, y_offset + (line_height * 3)), "Zero2 Controller", font=self.font, fill=255)
 
         # Display image.
         self.disp.image(self.image)

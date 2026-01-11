@@ -33,6 +33,7 @@ DEFAULT_CONFIG = {
     # Display Settings
     'I2C_MODE': 'hardware',  # 'hardware' (dtparam=i2c_arm=on) or 'gpio' (dtoverlay=i2c-gpio)
     'DISPLAY_UPDATE_INTERVAL': 2,  # Seconds between display updates
+    'ENABLE_BUTTONS': True,  # Enable button input handling from Adafruit Bonnet
 
     # Network Settings
     'BT_IP': '10.10.10.1',
