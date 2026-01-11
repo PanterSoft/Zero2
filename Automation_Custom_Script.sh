@@ -31,7 +31,13 @@ fi
 # 1. Install Git
 echo "Installing Git..."
 apt-get update
-apt-get install -y git
+
+if ! dpkg -l | grep -q "^ii  git"; then
+    echo "Installing git..."
+    apt-get install -y git
+else
+    echo "Git is already installed."
+fi
 
 # 2. Clone or Update Repository
 echo "Fetching Repository..."
