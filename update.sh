@@ -56,51 +56,78 @@ if [ -f "config/zero2.conf" ]; then
     if [ "$ENABLE_DISPLAY" = "true" ] || [ "$ENABLE_DISPLAY" = "1" ] || [ "$ENABLE_DISPLAY" = "yes" ] || [ "$ENABLE_DISPLAY" = "on" ]; then
         echo "Checking I2C configuration..."
 
-        # Method 1: Use DietPi's internal hardware configuration tool (preferred for DietPi)
+        # Read I2C_MODE from config file (default to hardware)
+        I2C_MODE="hardware"
+        I2C_MODE_CONFIG=$(grep "^I2C_MODE=" config/zero2.conf | cut -d'=' -f2 | tr -d ' ' | tr '[:upper:]' '[:lower:]')
+        if [ -n "$I2C_MODE_CONFIG" ]; then
+            I2C_MODE="$I2C_MODE_CONFIG"
+        fi
+
         I2C_ALREADY_ENABLED=false
         I2C_JUST_ENABLED=false
 
-        if [ -f "/boot/dietpi/func/dietpi-set_hardware" ]; then
-            echo "  Using DietPi's dietpi-set_hardware tool..."
-            # Check if I2C is already enabled by checking config.txt
-            if grep -qE "^[[:space:]]*dtparam=i2c_arm=on" /boot/config.txt; then
+        if [ "$I2C_MODE" = "gpio" ]; then
+            # GPIO-based I2C mode (for Raspberry Pi Zero 2W where hardware I2C doesn't work)
+            echo "  Configuring GPIO-based I2C (dtoverlay=i2c-gpio)..."
+
+            # Check if GPIO I2C overlay is already enabled
+            if grep -qE "^[[:space:]]*dtoverlay=i2c-gpio" /boot/config.txt; then
                 I2C_ALREADY_ENABLED=true
-                echo "  I2C already enabled in /boot/config.txt"
+                echo "  GPIO I2C overlay already enabled in /boot/config.txt"
             else
-                # Use DietPi's tool to enable I2C
-                if /boot/dietpi/func/dietpi-set_hardware i2c enable >/dev/null 2>&1; then
-                    I2C_JUST_ENABLED=true
-                    I2C_CHANGED=true
-                    echo "  Enabled I2C via dietpi-set_hardware"
+                # Add GPIO I2C overlay: dtoverlay=i2c-gpio,i2c_gpio_sda=3,i2c_gpio_scl=5,bus=1
+                echo "dtoverlay=i2c-gpio,i2c_gpio_sda=3,i2c_gpio_scl=5,bus=1" >> /boot/config.txt
+                I2C_JUST_ENABLED=true
+                I2C_CHANGED=true
+                echo "  Added GPIO I2C overlay to /boot/config.txt"
+            fi
+        else
+            # Hardware I2C mode (default)
+            echo "  Configuring hardware I2C (dtparam=i2c_arm=on)..."
+
+            # Method 1: Use DietPi's internal hardware configuration tool (preferred for DietPi)
+            if [ -f "/boot/dietpi/func/dietpi-set_hardware" ]; then
+                echo "  Using DietPi's dietpi-set_hardware tool..."
+                # Check if I2C is already enabled by checking config.txt
+                if grep -qE "^[[:space:]]*dtparam=i2c_arm=on" /boot/config.txt; then
+                    I2C_ALREADY_ENABLED=true
+                    echo "  I2C already enabled in /boot/config.txt"
                 else
-                    echo "  dietpi-set_hardware failed, using direct config.txt method"
+                    # Use DietPi's tool to enable I2C
+                    if /boot/dietpi/func/dietpi-set_hardware i2c enable >/dev/null 2>&1; then
+                        I2C_JUST_ENABLED=true
+                        I2C_CHANGED=true
+                        echo "  Enabled I2C via dietpi-set_hardware"
+                    else
+                        echo "  dietpi-set_hardware failed, using direct config.txt method"
+                    fi
                 fi
             fi
-        fi
 
-        # Method 2: Direct /boot/config.txt modification (fallback or if DietPi tool not available)
-        if [ "$I2C_ALREADY_ENABLED" = false ] && [ "$I2C_JUST_ENABLED" = false ]; then
-            if grep -qE "^[[:space:]]*dtparam=i2c_arm=on" /boot/config.txt; then
-                I2C_ALREADY_ENABLED=true
-                echo "  I2C already enabled in /boot/config.txt"
-            elif grep -qE "^[[:space:]]*dtparam=i2c_arm=off" /boot/config.txt; then
-                sed -i 's/^[[:space:]]*dtparam=i2c_arm=off/dtparam=i2c_arm=on/' /boot/config.txt
-                I2C_JUST_ENABLED=true
-                I2C_CHANGED=true
-                echo "  Changed dtparam=i2c_arm=off to dtparam=i2c_arm=on"
-            elif grep -qE "^[[:space:]]*#.*dtparam=i2c_arm=" /boot/config.txt; then
-                # I2C line is commented out (with optional whitespace before #), uncomment and enable
-                # Handle both "#dtparam=i2c_arm=off" and "# dtparam=i2c_arm=off" patterns
-                sed -i -E 's/^([[:space:]]*)#([[:space:]]*)dtparam=i2c_arm=.*/\1dtparam=i2c_arm=on/' /boot/config.txt
-                I2C_JUST_ENABLED=true
-                I2C_CHANGED=true
-                echo "  Uncommented and enabled I2C in /boot/config.txt"
-            else
-                # I2C is not enabled yet, add it
-                echo "dtparam=i2c_arm=on" >> /boot/config.txt
-                I2C_JUST_ENABLED=true
-                I2C_CHANGED=true
-                echo "  Added dtparam=i2c_arm=on to /boot/config.txt"
+            # Method 2: Direct /boot/config.txt modification (fallback or if DietPi tool not available)
+            if [ "$I2C_ALREADY_ENABLED" = false ] && [ "$I2C_JUST_ENABLED" = false ]; then
+                if grep -qE "^[[:space:]]*dtparam=i2c_arm=on" /boot/config.txt; then
+                    I2C_ALREADY_ENABLED=true
+                    echo "  I2C already enabled in /boot/config.txt"
+                elif grep -qE "^[[:space:]]*dtparam=i2c_arm=off" /boot/config.txt; then
+                    sed -i 's/^[[:space:]]*dtparam=i2c_arm=off/dtparam=i2c_arm=on/' /boot/config.txt
+                    I2C_JUST_ENABLED=true
+                    I2C_CHANGED=true
+                    echo "  Changed dtparam=i2c_arm=off to dtparam=i2c_arm=on"
+                elif grep -qE "^[[:space:]]*#.*dtparam=i2c_arm=" /boot/config.txt; then
+                    # I2C line is commented out (with optional whitespace before #), uncomment and enable
+                    # Handle both "#dtparam=i2c_arm=off" and "# dtparam=i2c_arm=off" patterns
+                    sed -i -E 's/^([[:space:]]*)#([[:space:]]*)dtparam=i2c_arm=.*/\1dtparam=i2c_arm=on/' /boot/config.txt
+                    I2C_JUST_ENABLED=true
+                    I2C_CHANGED=true
+                    echo "  Uncommented and enabled I2C in /boot/config.txt"
+                else
+                    # I2C is not enabled yet, add it
+                    echo "dtparam=i2c_arm=on" >> /boot/config.txt
+                    I2C_JUST_ENABLED=true
+                    I2C_CHANGED=true
+                    echo "  Added dtparam=i2c_arm=on to /boot/config.txt"
+                fi
             fi
         fi
 
@@ -158,5 +185,5 @@ echo "  sudo systemctl restart zero2-controller.service"
 # Only show reboot hint if I2C was actually changed
 if [ "$I2C_CHANGED" = true ]; then
     echo ""
-    echo "Note: I2C was just enabled. A reboot may be required: sudo shutdown -r now  (or sudo reboot)"
+    echo "Note: I2C was just enabled ($I2C_MODE mode). A reboot may be required: sudo shutdown -r now  (or sudo reboot)"
 fi

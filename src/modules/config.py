@@ -31,6 +31,7 @@ DEFAULT_CONFIG = {
     'POWER_NOTIFY_TERMINALS': True,  # Send wall messages to all terminals
 
     # Display Settings
+    'I2C_MODE': 'hardware',  # 'hardware' (dtparam=i2c_arm=on) or 'gpio' (dtoverlay=i2c-gpio)
     'DISPLAY_UPDATE_INTERVAL': 2,  # Seconds between display updates
 
     # Network Settings
