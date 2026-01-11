@@ -208,9 +208,11 @@ if [ "$ENABLE_DISPLAY" = true ]; then
         fi
     fi
 
-    # Install I2C tools and Python libraries (needed for I2C functionality)
-    if [ "$I2C_JUST_ENABLED" = true ] || [ "$I2C_ALREADY_ENABLED" = true ]; then
-        echo "  Installing I2C tools and Python libraries..."
+    # Install I2C tools and Python libraries only if:
+    # 1. I2C was just enabled/changed, OR
+    # 2. Packages are missing (even if I2C already enabled)
+    if [ "$I2C_JUST_ENABLED" = true ]; then
+        echo "  Installing I2C tools and Python libraries (I2C was just enabled)..."
         I2C_PACKAGES_TO_INSTALL=()
 
         # Check for i2c-tools
@@ -229,6 +231,26 @@ if [ "$ENABLE_DISPLAY" = true ]; then
             echo "  Installed: ${I2C_PACKAGES_TO_INSTALL[*]}"
         else
             echo "  I2C tools already installed"
+        fi
+    elif [ "$I2C_ALREADY_ENABLED" = true ]; then
+        # I2C already enabled - only check if packages are missing
+        I2C_PACKAGES_TO_INSTALL=()
+
+        # Check for i2c-tools
+        if ! dpkg -l | grep -q "^ii  i2c-tools[[:space:]]"; then
+            I2C_PACKAGES_TO_INSTALL+=("i2c-tools")
+        fi
+
+        # Check for python3-smbus
+        if ! dpkg -l | grep -q "^ii  python3-smbus[[:space:]]"; then
+            I2C_PACKAGES_TO_INSTALL+=("python3-smbus")
+        fi
+
+        if [ ${#I2C_PACKAGES_TO_INSTALL[@]} -gt 0 ]; then
+            echo "  Installing missing I2C tools and Python libraries..."
+            apt-get update -qq
+            apt-get install -y "${I2C_PACKAGES_TO_INSTALL[@]}"
+            echo "  Installed: ${I2C_PACKAGES_TO_INSTALL[*]}"
         fi
     fi
 
