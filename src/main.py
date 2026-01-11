@@ -1,6 +1,7 @@
 import time
 import signal
 import sys
+import atexit
 from modules.display import DisplayManager
 from modules.power import PowerManager
 from modules.buttons import ButtonHandler
@@ -10,9 +11,44 @@ from modules.logger import setup_logger
 
 logger = setup_logger()
 
+# Global display reference for cleanup
+_display_instance = None
+_buttons_instance = None
+_power_instance = None
+
+def cleanup_resources():
+    """Clean up all resources on exit."""
+    global _display_instance, _buttons_instance, _power_instance
+
+    logger.info("Cleaning up resources...")
+
+    if _display_instance:
+        try:
+            _display_instance.cleanup()
+        except Exception as e:
+            logger.error(f"Error cleaning up display: {e}", exc_info=True)
+
+    if _buttons_instance:
+        try:
+            _buttons_instance.cleanup()
+        except Exception as e:
+            logger.error(f"Error cleaning up buttons: {e}", exc_info=True)
+
+    if _power_instance:
+        try:
+            _power_instance.stop_monitoring()
+        except Exception as e:
+            logger.error(f"Error stopping power monitoring: {e}", exc_info=True)
+
+    logger.info("Cleanup complete")
+
 def signal_handler(sig, frame):
     logger.info("Received shutdown signal. Exiting...")
+    cleanup_resources()
     sys.exit(0)
+
+# Register cleanup function to be called on normal exit
+atexit.register(cleanup_resources)
 
 def main():
     signal.signal(signal.SIGINT, signal_handler)
@@ -21,20 +57,24 @@ def main():
     logger.info("Zero2 Controller Starting...")
 
     # 1. Initialize Display
+    global _display_instance
     display = None
     try:
         display = DisplayManager()
+        _display_instance = display  # Store for cleanup
         logger.info("Display initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize display: {e}", exc_info=True)
 
     # 2. Initialize Buttons (if enabled)
+    global _buttons_instance
     config = read_config()
     buttons = None
     # Initialize buttons if enabled (buttons can work even if display failed)
     if config.get('ENABLE_BUTTONS', True):
         try:
             buttons = ButtonHandler()
+            _buttons_instance = buttons  # Store for cleanup
             logger.info("Button handler initialized successfully")
 
             # Menu navigation callbacks
@@ -116,10 +156,12 @@ def main():
         logger.info("Button handling disabled (ENABLE_BUTTONS=false)")
 
     # 3. Start Power Monitor (if enabled)
+    global _power_instance
     power = None
     if config.get('ENABLE_LOW_BAT', True):
         try:
             power = PowerManager(display_manager=display)
+            _power_instance = power  # Store for cleanup
             power.start_monitoring()
             logger.info(f"Power monitoring enabled (GPIO {power.pin}, threshold: {power.threshold}s)")
         except Exception as e:
@@ -152,6 +194,10 @@ def main():
             # Very small sleep to avoid busy-waiting while maintaining responsiveness
             time.sleep(0.005)  # 5ms sleep for very responsive button checking
 
+        except KeyboardInterrupt:
+            logger.info("Keyboard interrupt received. Exiting...")
+            cleanup_resources()
+            sys.exit(0)
         except Exception as e:
             logger.error(f"Error in main loop: {e}", exc_info=True)
             time.sleep(5)

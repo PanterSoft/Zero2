@@ -461,6 +461,19 @@ class DisplayManager:
         self.warning_message = None
         self.warning_timeout = None
 
+    def cleanup(self):
+        """Clean up display by clearing all pixels and turning off."""
+        try:
+            with self.display_lock:
+                # Clear the image buffer
+                self.draw.rectangle((0, 0, self.width, self.height), outline=0, fill=0)
+                # Clear the display hardware
+                self.disp.fill(0)
+                self.disp.show()
+                logger.info("Display cleaned up - all pixels cleared")
+        except Exception as e:
+            logger.warning(f"Error during display cleanup: {e}")
+
     def update_info(self):
         # Thread-safe display update (entire method protected)
         with self.display_lock:
