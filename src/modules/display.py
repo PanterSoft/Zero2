@@ -172,6 +172,16 @@ class DisplayManager:
         self.network_stats_cache_time = 0
         self.network_stats_cache_interval = 2  # Update network stats every 2 seconds
 
+        # IP scrolling animation state
+        self.ip_scroll_text = ""
+        self.ip_scroll_position = 0
+        self.ip_scroll_direction = 1  # 1 = scrolling right, -1 = scrolling left
+        self.ip_scroll_last_update = 0
+        self.ip_scroll_interval = 0.3  # Scroll every 300ms
+        self.ip_scroll_pause_time = 2.0  # Pause for 2 seconds at each end
+        self.ip_scroll_pause_start = 0
+        self.ip_scroll_paused = False
+
     def _get_battery_status(self):
         """Get battery percentage if available."""
         try:
@@ -605,22 +615,61 @@ class DisplayManager:
         # Draw compact dashboard using layout manager
         y = y_offset
 
-        # Line 1: Combined WiFi/Ethernet IP (left) and CPU (right)
-        # Build IP text: show WiFi and Ethernet if both available
+        # Line 1: Combined WiFi/Ethernet IP (left) with scrolling animation and CPU (right)
+        # Build full IP text: show WiFi and Ethernet if both available
         ip_parts = []
         if wlan_ip:
-            ip_parts.append(f"W:{wlan_ip[:9]}")  # Max 9 chars for WiFi IP
+            ip_parts.append(f"W:{wlan_ip}")
         if eth_ip:
-            ip_parts.append(f"E:{eth_ip[:9]}")  # Max 9 chars for Ethernet IP
+            ip_parts.append(f"E:{eth_ip}")
 
         if not ip_parts:
-            ip_text = "IP:N/A"
+            full_ip_text = "IP:N/A"
         else:
-            ip_text = " ".join(ip_parts)
+            full_ip_text = " ".join(ip_parts)
 
-        # Truncate IP text to fit left column
+        # Calculate max chars that fit in left column
         max_ip_chars = left_col_width // self.layout.font_char_width
-        ip_text = ip_text[:max_ip_chars]
+
+        # Initialize or update scroll state if IP text changed
+        if self.ip_scroll_text != full_ip_text:
+            self.ip_scroll_text = full_ip_text
+            self.ip_scroll_position = 0
+            self.ip_scroll_direction = 1
+            self.ip_scroll_paused = False
+            self.ip_scroll_pause_start = 0
+
+        # Handle scrolling animation if text is longer than available space
+        if len(full_ip_text) > max_ip_chars:
+            current_time = time.time()
+
+            # Check if we should pause at the end
+            if self.ip_scroll_paused:
+                if current_time - self.ip_scroll_pause_start >= self.ip_scroll_pause_time:
+                    self.ip_scroll_paused = False
+                    # Reverse direction
+                    self.ip_scroll_direction *= -1
+            else:
+                # Update scroll position
+                if current_time - self.ip_scroll_last_update >= self.ip_scroll_interval:
+                    self.ip_scroll_position += self.ip_scroll_direction
+                    self.ip_scroll_last_update = current_time
+
+                    # Check if we've reached the end
+                    if self.ip_scroll_position <= 0:
+                        self.ip_scroll_position = 0
+                        self.ip_scroll_paused = True
+                        self.ip_scroll_pause_start = current_time
+                    elif self.ip_scroll_position >= len(full_ip_text) - max_ip_chars:
+                        self.ip_scroll_position = len(full_ip_text) - max_ip_chars
+                        self.ip_scroll_paused = True
+                        self.ip_scroll_pause_start = current_time
+
+            # Extract visible portion of text
+            ip_text = full_ip_text[self.ip_scroll_position:self.ip_scroll_position + max_ip_chars]
+        else:
+            # Text fits, no scrolling needed
+            ip_text = full_ip_text[:max_ip_chars]
 
         cpu_text = f"CPU:{CPU_load[:4]}"  # Max 4 chars for CPU load
 
