@@ -54,36 +54,45 @@ if [ -f "config/zero2.conf" ]; then
         echo "Checking I2C configuration..."
 
         # Check if I2C is enabled (handle with/without leading whitespace)
-        I2C_ENABLED=false
+        I2C_ALREADY_ENABLED=false
+        I2C_JUST_ENABLED=false
+
         if grep -qE "^[[:space:]]*dtparam=i2c_arm=on" /boot/config.txt; then
-            I2C_ENABLED=true
+            I2C_ALREADY_ENABLED=true
             echo "  I2C already enabled in /boot/config.txt"
         elif grep -qE "^[[:space:]]*dtparam=i2c_arm=off" /boot/config.txt; then
             sed -i 's/^[[:space:]]*dtparam=i2c_arm=off/dtparam=i2c_arm=on/' /boot/config.txt
-            I2C_ENABLED=true
+            I2C_JUST_ENABLED=true
             echo "  Changed dtparam=i2c_arm=off to dtparam=i2c_arm=on"
         elif grep -qE "^[[:space:]]*#.*dtparam=i2c_arm=" /boot/config.txt; then
             # I2C line is commented out (with optional whitespace before #), uncomment and enable
             # Handle both "#dtparam=i2c_arm=off" and "# dtparam=i2c_arm=off" patterns
             sed -i -E 's/^([[:space:]]*)#([[:space:]]*)dtparam=i2c_arm=.*/\1dtparam=i2c_arm=on/' /boot/config.txt
-            I2C_ENABLED=true
+            I2C_JUST_ENABLED=true
             echo "  Uncommented and enabled I2C in /boot/config.txt"
-        fi
-
-        # If I2C is not enabled yet, add it
-        if [ "$I2C_ENABLED" = false ]; then
+        else
+            # I2C is not enabled yet, add it
             echo "dtparam=i2c_arm=on" >> /boot/config.txt
+            I2C_JUST_ENABLED=true
             echo "  Added dtparam=i2c_arm=on to /boot/config.txt"
         fi
 
-        # Load I2C kernel module
-        modprobe i2c-dev 2>/dev/null || echo "  Warning: Could not load i2c-dev module"
+        # Only show warnings if I2C was just enabled
+        if [ "$I2C_JUST_ENABLED" = true ]; then
+            # I2C was just enabled, try to load module and check
+            modprobe i2c-dev 2>/dev/null || echo "  Warning: Could not load i2c-dev module"
 
-        # Verify I2C is accessible
-        if [ -e /dev/i2c-1 ] || [ -e /dev/i2c-0 ]; then
-            echo "  I2C device files found - I2C should be working"
-        else
-            echo "  Warning: I2C device files not found. A reboot may be required."
+            # Verify I2C is accessible
+            if [ -e /dev/i2c-1 ] || [ -e /dev/i2c-0 ]; then
+                echo "  I2C device files found - I2C should be working"
+            else
+                echo "  Warning: I2C device files not found. A reboot may be required."
+            fi
+        elif [ "$I2C_ALREADY_ENABLED" = true ]; then
+            # I2C was already enabled, silently verify it's working (no warnings)
+            if [ -e /dev/i2c-1 ] || [ -e /dev/i2c-0 ]; then
+                echo "  I2C device files found - I2C is working"
+            fi
         fi
     fi
 fi
