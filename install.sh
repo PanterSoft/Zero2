@@ -215,13 +215,13 @@ if [ "$ENABLE_DISPLAY" = true ]; then
         echo "  Installing I2C tools and Python libraries (I2C was just enabled)..."
         I2C_PACKAGES_TO_INSTALL=()
 
-        # Check for i2c-tools
-        if ! dpkg -l | grep -q "^ii  i2c-tools[[:space:]]"; then
+        # Check for i2c-tools (more robust check)
+        if ! dpkg -l 2>/dev/null | grep -qE "^ii[[:space:]]+i2c-tools[[:space:]]"; then
             I2C_PACKAGES_TO_INSTALL+=("i2c-tools")
         fi
 
-        # Check for python3-smbus
-        if ! dpkg -l | grep -q "^ii  python3-smbus[[:space:]]"; then
+        # Check for python3-smbus (more robust check)
+        if ! dpkg -l 2>/dev/null | grep -qE "^ii[[:space:]]+python3-smbus[[:space:]]"; then
             I2C_PACKAGES_TO_INSTALL+=("python3-smbus")
         fi
 
@@ -233,25 +233,28 @@ if [ "$ENABLE_DISPLAY" = true ]; then
             echo "  I2C tools already installed"
         fi
     elif [ "$I2C_ALREADY_ENABLED" = true ]; then
-        # I2C already enabled - only check if packages are missing
+        # I2C already enabled - silently check if packages are missing
+        # Only install if actually missing (no message if already installed)
         I2C_PACKAGES_TO_INSTALL=()
 
-        # Check for i2c-tools
-        if ! dpkg -l | grep -q "^ii  i2c-tools[[:space:]]"; then
+        # Check for i2c-tools (more robust check)
+        if ! dpkg -l 2>/dev/null | grep -qE "^ii[[:space:]]+i2c-tools[[:space:]]"; then
             I2C_PACKAGES_TO_INSTALL+=("i2c-tools")
         fi
 
-        # Check for python3-smbus
-        if ! dpkg -l | grep -q "^ii  python3-smbus[[:space:]]"; then
+        # Check for python3-smbus (more robust check)
+        if ! dpkg -l 2>/dev/null | grep -qE "^ii[[:space:]]+python3-smbus[[:space:]]"; then
             I2C_PACKAGES_TO_INSTALL+=("python3-smbus")
         fi
 
+        # Only install and show message if packages are actually missing
         if [ ${#I2C_PACKAGES_TO_INSTALL[@]} -gt 0 ]; then
             echo "  Installing missing I2C tools and Python libraries..."
             apt-get update -qq
             apt-get install -y "${I2C_PACKAGES_TO_INSTALL[@]}"
             echo "  Installed: ${I2C_PACKAGES_TO_INSTALL[*]}"
         fi
+        # No message if packages are already installed (silent success)
     fi
 
     # Only show warnings if I2C was just enabled
