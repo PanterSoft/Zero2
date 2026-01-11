@@ -28,11 +28,7 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# 1. Install Git
-echo "Installing Git..."
-
-
-if ! dpkg -l | grep -q "^ii  git"; then
+if ! dpkg -l | grep -q "^ii  git[[:space:]]"; then
     echo "Installing git..."
     apt-get install -y git
 else
