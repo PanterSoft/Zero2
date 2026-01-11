@@ -99,18 +99,14 @@ iface bnep0 inet static
 EOF
 fi
 
-# 4. Install helper scripts (hotspot / BT PAN / USB gadget / update)
+# 4. Install helper scripts (all .sh files from scripts/ directory)
 echo "Installing helper scripts..."
 mkdir -p /usr/local/bin/zero2
-for script in \
-    scripts/enable-hotspot.sh \
-    scripts/disable-hotspot.sh \
-    scripts/enable-bt-pan.sh \
-    scripts/disable-bt-pan.sh \
-    scripts/enable-usb-ether.sh \
-    scripts/disable-usb-ether.sh \
-    scripts/update-repo.sh; do
-    install -m 755 "$script" /usr/local/bin/zero2/
+for script in scripts/*.sh; do
+    if [ -f "$script" ]; then
+        install -m 755 "$script" /usr/local/bin/zero2/
+        echo "  Installed: $(basename $script)"
+    fi
 done
 
 # 5. Setup Python Environment
