@@ -1,2 +1,5 @@
+RPi.GPIO
+adafruit-circuitpython-ssd1306
+adafruit-circuitpython-framebuf
+Pillow
 dbus-python
-pybluez
