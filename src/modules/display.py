@@ -269,23 +269,26 @@ class DisplayManager:
         # Ensure icon fits within menu bar bounds (12px height)
         icon_size = 7
         icon_y_start = y + 2  # Start at y+2
-        icon_y_mid = y + 5    # Middle
+        icon_y_mid = y + 6    # Middle
         icon_y_end = y + 9    # End at y+9 (fits in 12px menu bar)
 
         if status == 'connected':
             # Connected: show filled signal bars (more visible)
-            # Outer arc (largest)
+            # Outer arc (largest) - ensure y1 > y0
             self.draw.arc([x, icon_y_start, x+icon_size, icon_y_end], start=180, end=0, fill=255)
-            # Middle arc
-            self.draw.arc([x+1, icon_y_start+2, x+icon_size-1, icon_y_end-2], start=180, end=0, fill=255)
-            # Inner arc
-            self.draw.arc([x+2, icon_y_start+4, x+icon_size-2, icon_y_end-4], start=180, end=0, fill=255)
+            # Middle arc - ensure y1 > y0
+            if icon_y_start + 2 < icon_y_end - 2:
+                self.draw.arc([x+1, icon_y_start+1, x+icon_size-1, icon_y_end-1], start=180, end=0, fill=255)
+            # Inner arc - ensure y1 > y0
+            if icon_y_start + 3 < icon_y_end - 2:
+                self.draw.arc([x+2, icon_y_start+2, x+icon_size-2, icon_y_end-2], start=180, end=0, fill=255)
             # Center dot
             self.draw.rectangle([x+3, icon_y_mid, x+4, icon_y_mid+1], fill=255)
         elif status == 'enabled':
             # Enabled but not connected: show outline only
             self.draw.arc([x, icon_y_start, x+icon_size, icon_y_end], start=180, end=0, outline=255)
-            self.draw.arc([x+2, icon_y_start+2, x+icon_size-2, icon_y_end-2], start=180, end=0, outline=255)
+            if icon_y_start + 2 < icon_y_end - 2:
+                self.draw.arc([x+2, icon_y_start+2, x+icon_size-2, icon_y_end-2], start=180, end=0, outline=255)
         else:
             # Disabled: show X
             self.draw.line([x, icon_y_start, x+icon_size, icon_y_end], fill=255)
