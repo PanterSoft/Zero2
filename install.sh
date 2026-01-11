@@ -121,19 +121,20 @@ fi
 if [ "$ENABLE_DISPLAY" = true ]; then
     echo "Enabling I2C for display support..."
 
-    # Check if I2C is already enabled
+    # Check if I2C is already enabled (handle with/without leading whitespace)
     I2C_ENABLED=false
-    if grep -q "^dtparam=i2c_arm=on" /boot/config.txt; then
+    if grep -qE "^[[:space:]]*dtparam=i2c_arm=on" /boot/config.txt; then
         I2C_ENABLED=true
         echo "  I2C already enabled in /boot/config.txt"
-    elif grep -q "^dtparam=i2c_arm=off" /boot/config.txt; then
+    elif grep -qE "^[[:space:]]*dtparam=i2c_arm=off" /boot/config.txt; then
         # I2C is explicitly disabled, change it to on
-        sed -i 's/^dtparam=i2c_arm=off/dtparam=i2c_arm=on/' /boot/config.txt
+        sed -i 's/^[[:space:]]*dtparam=i2c_arm=off/dtparam=i2c_arm=on/' /boot/config.txt
         I2C_ENABLED=true
         echo "  Changed dtparam=i2c_arm=off to dtparam=i2c_arm=on"
-    elif grep -q "^#dtparam=i2c_arm=" /boot/config.txt; then
-        # I2C line is commented out, uncomment and enable
-        sed -i 's/^#dtparam=i2c_arm=.*/dtparam=i2c_arm=on/' /boot/config.txt
+    elif grep -qE "^[[:space:]]*#.*dtparam=i2c_arm=" /boot/config.txt; then
+        # I2C line is commented out (with optional whitespace before #), uncomment and enable
+        # Handle both "#dtparam=i2c_arm=off" and "# dtparam=i2c_arm=off" patterns
+        sed -i -E 's/^([[:space:]]*)#([[:space:]]*)dtparam=i2c_arm=.*/\1dtparam=i2c_arm=on/' /boot/config.txt
         I2C_ENABLED=true
         echo "  Uncommented and enabled I2C in /boot/config.txt"
     fi
