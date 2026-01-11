@@ -245,44 +245,52 @@ class DisplayManager:
 
     def _draw_wifi_icon(self, x, y, status=None):
         """Draw a simple WiFi icon."""
-        # Ensure icon fits within menu bar bounds (y+2 to y+10 = 8px height)
-        icon_size = 6
-        icon_y_start = y + 3  # Start at y+3 to fit in menu bar
-        icon_y_end = y + 9     # End at y+9 (fits in 12px menu bar)
+        # Ensure icon fits within menu bar bounds (12px height)
+        icon_size = 7
+        icon_y_start = y + 2  # Start at y+2
+        icon_y_mid = y + 5    # Middle
+        icon_y_end = y + 9    # End at y+9 (fits in 12px menu bar)
 
         if status == 'connected':
-            # Connected: show signal bars
-            # Signal bars (3 bars) - adjusted to fit menu bar
-            self.draw.arc([x, icon_y_start+1, x+icon_size, icon_y_end], start=180, end=0, fill=255)  # Outer arc
-            self.draw.arc([x+2, icon_y_start+3, x+4, icon_y_start+5], start=180, end=0, fill=255)  # Inner arc
-            self.draw.point([x+3, icon_y_start+4], fill=255)  # Center dot
+            # Connected: show filled signal bars (more visible)
+            # Outer arc (largest)
+            self.draw.arc([x, icon_y_start, x+icon_size, icon_y_end], start=180, end=0, fill=255)
+            # Middle arc
+            self.draw.arc([x+1, icon_y_start+2, x+icon_size-1, icon_y_end-2], start=180, end=0, fill=255)
+            # Inner arc
+            self.draw.arc([x+2, icon_y_start+4, x+icon_size-2, icon_y_end-4], start=180, end=0, fill=255)
+            # Center dot
+            self.draw.rectangle([x+3, icon_y_mid, x+4, icon_y_mid+1], fill=255)
         elif status == 'enabled':
-            # Enabled but not connected: show outline
-            self.draw.arc([x, icon_y_start+1, x+icon_size, icon_y_end], start=180, end=0, outline=255)
-        else:
-            # Disabled: show X
-            self.draw.line([x, icon_y_start+1, x+icon_size, icon_y_end], fill=255)
-            self.draw.line([x+icon_size, icon_y_start+1, x, icon_y_end], fill=255)
-
-    def _draw_bluetooth_icon(self, x, y, status=None):
-        """Draw a simple Bluetooth icon."""
-        # Ensure icon fits within menu bar bounds (y+2 to y+10 = 8px height)
-        icon_size = 6
-        icon_y_start = y + 2  # Start at y+2
-        icon_y_end = y + 10    # End at y+10 (fits in 12px menu bar)
-
-        if status == 'enabled':
-            # Bluetooth symbol (simplified) - adjusted to fit menu bar
-            # Top triangle
-            self.draw.polygon([(x+3, icon_y_start), (x+icon_size, icon_y_start+3), (x+3, icon_y_start+6)], outline=255, fill=0)
-            # Bottom triangle
-            self.draw.polygon([(x+3, icon_y_start+6), (x+icon_size, icon_y_start+9), (x+3, icon_y_end)], outline=255, fill=0)
-            # Center line
-            self.draw.line([x+3, icon_y_start, x+3, icon_y_end], fill=255)
+            # Enabled but not connected: show outline only
+            self.draw.arc([x, icon_y_start, x+icon_size, icon_y_end], start=180, end=0, outline=255)
+            self.draw.arc([x+2, icon_y_start+2, x+icon_size-2, icon_y_end-2], start=180, end=0, outline=255)
         else:
             # Disabled: show X
             self.draw.line([x, icon_y_start, x+icon_size, icon_y_end], fill=255)
             self.draw.line([x+icon_size, icon_y_start, x, icon_y_end], fill=255)
+
+    def _draw_bluetooth_icon(self, x, y, status=None):
+        """Draw a simple Bluetooth icon - scaled down to fit menu bar."""
+        # Smaller icon to fit in 12px menu bar
+        icon_width = 5
+        icon_y_start = y + 3  # Start at y+3
+        icon_y_mid = y + 6    # Middle
+        icon_y_end = y + 9    # End at y+9 (fits in 12px menu bar)
+        center_x = x + 2      # Center of icon
+
+        if status == 'enabled':
+            # Bluetooth symbol (smaller, simplified)
+            # Top triangle (smaller)
+            self.draw.polygon([(center_x, icon_y_start), (x+icon_width, icon_y_mid-1), (center_x, icon_y_mid)], outline=255, fill=0)
+            # Bottom triangle (smaller)
+            self.draw.polygon([(center_x, icon_y_mid), (x+icon_width, icon_y_end-1), (center_x, icon_y_end)], outline=255, fill=0)
+            # Center vertical line (shorter)
+            self.draw.line([center_x, icon_y_start, center_x, icon_y_end], fill=255)
+        else:
+            # Disabled: show X (smaller)
+            self.draw.line([x, icon_y_start+1, x+icon_width, icon_y_end-1], fill=255)
+            self.draw.line([x+icon_width, icon_y_start+1, x, icon_y_end-1], fill=255)
 
     def _draw_menu_bar(self):
         """Draw the top menu bar with status icons."""
@@ -320,15 +328,15 @@ class DisplayManager:
 
         # WiFi icon
         wifi_status = self.status_cache.get('wifi')
-        if wifi_status is not None and x + 8 < self.width:
+        if wifi_status is not None and x + 9 < self.width:
             self._draw_wifi_icon(x, 0, wifi_status)
-            x += 10
+            x += 9  # Smaller spacing for WiFi icon
 
         # Bluetooth icon
         bt_status = self.status_cache.get('bluetooth')
-        if bt_status is not None and x + 8 < self.width:
+        if bt_status is not None and x + 7 < self.width:
             self._draw_bluetooth_icon(x, 0, bt_status)
-            x += 10
+            x += 7  # Smaller spacing for Bluetooth icon
 
     def show_warning(self, message, timeout=None):
         """
