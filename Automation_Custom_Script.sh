@@ -30,7 +30,7 @@ fi
 
 # 1. Install Git
 echo "Installing Git..."
-apt-get update
+
 
 if ! dpkg -l | grep -q "^ii  git"; then
     echo "Installing git..."
