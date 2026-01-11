@@ -11,7 +11,59 @@ logger = get_logger(__name__)
 class DisplayManager:
     def __init__(self):
         # Create the I2C interface.
-        self.i2c = busio.I2C(board.SCL, board.SDA)
+        # For Raspberry Pi, try different I2C initialization methods
+        # Error shows valid ports: ((1, 3, 2), (0, 1, 0))
+        # Format appears to be (port, scl_pin, sda_pin)
+        self.i2c = None
+
+        # Method 1: Try using board.I2C() if available (CircuitPython 7+)
+        try:
+            if hasattr(board, 'I2C'):
+                self.i2c = board.I2C()
+                logger.debug("Initialized I2C using board.I2C()")
+        except (ValueError, RuntimeError, AttributeError) as e:
+            logger.debug(f"board.I2C() failed: {e}")
+
+        # Method 2: Try explicit GPIO pins for I2C port 1 (SCL=GPIO3, SDA=GPIO2)
+        if self.i2c is None:
+            try:
+                import digitalio
+                # Standard Raspberry Pi I2C pins: GPIO 3 (SCL) and GPIO 2 (SDA)
+                scl = digitalio.DigitalInOut(board.GP3)
+                sda = digitalio.DigitalInOut(board.GP2)
+                self.i2c = busio.I2C(scl, sda)
+                logger.debug("Initialized I2C using GPIO 3 (SCL) and GPIO 2 (SDA)")
+            except (ValueError, RuntimeError, AttributeError) as e:
+                logger.debug(f"I2C init with GP3/GP2 failed: {e}")
+
+        # Method 3: Try using board.SCL/SDA (might work on some configurations)
+        if self.i2c is None:
+            try:
+                self.i2c = busio.I2C(board.SCL, board.SDA)
+                logger.debug("Initialized I2C using board.SCL/SDA")
+            except (ValueError, RuntimeError) as e:
+                logger.debug(f"I2C init with board.SCL/SDA failed: {e}")
+
+        # Method 4: Try I2C port 0 (alternative pins)
+        if self.i2c is None:
+            try:
+                import digitalio
+                # Port 0 uses GPIO 1 (SCL) and GPIO 0 (SDA)
+                scl = digitalio.DigitalInOut(board.GP1)
+                sda = digitalio.DigitalInOut(board.GP0)
+                self.i2c = busio.I2C(scl, sda)
+                logger.debug("Initialized I2C using GPIO 1 (SCL) and GPIO 0 (SDA)")
+            except (ValueError, RuntimeError, AttributeError) as e:
+                logger.debug(f"I2C init with GP1/GP0 failed: {e}")
+
+        if self.i2c is None:
+            error_msg = (
+                "Failed to initialize I2C. Valid I2C ports: ((1, 3, 2), (0, 1, 0)). "
+                "Make sure I2C is enabled in /boot/config.txt (dtparam=i2c_arm=on) "
+                "and the display is properly connected."
+            )
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
 
         # Create the SSD1306 OLED class.
         # The 128x64 display.
