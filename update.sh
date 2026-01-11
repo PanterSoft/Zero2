@@ -70,6 +70,14 @@ if [ -f "config/zero2.conf" ]; then
             # GPIO-based I2C mode (for Raspberry Pi Zero 2W where hardware I2C doesn't work)
             echo "  Configuring GPIO-based I2C (dtoverlay=i2c-gpio)..."
 
+            # Disable hardware I2C if present (they cannot coexist)
+            if grep -qE "^[[:space:]]*dtparam=i2c_arm=" /boot/config.txt; then
+                sed -i 's/^[[:space:]]*dtparam=i2c_arm=.*/#dtparam=i2c_arm=off  # Disabled: using GPIO I2C instead/' /boot/config.txt
+                echo "  Disabled hardware I2C (dtparam=i2c_arm) - GPIO I2C will be used instead"
+                I2C_JUST_ENABLED=true
+                I2C_CHANGED=true
+            fi
+
             # Check if GPIO I2C overlay is already enabled
             if grep -qE "^[[:space:]]*dtoverlay=i2c-gpio" /boot/config.txt; then
                 I2C_ALREADY_ENABLED=true
@@ -84,6 +92,14 @@ if [ -f "config/zero2.conf" ]; then
         else
             # Hardware I2C mode (default)
             echo "  Configuring hardware I2C (dtparam=i2c_arm=on)..."
+
+            # Disable GPIO I2C overlay if present (they cannot coexist)
+            if grep -qE "^[[:space:]]*dtoverlay=i2c-gpio" /boot/config.txt; then
+                sed -i 's/^[[:space:]]*dtoverlay=i2c-gpio.*/#dtoverlay=i2c-gpio  # Disabled: using hardware I2C instead/' /boot/config.txt
+                echo "  Disabled GPIO I2C overlay - hardware I2C will be used instead"
+                I2C_JUST_ENABLED=true
+                I2C_CHANGED=true
+            fi
 
             # Method 1: Use DietPi's internal hardware configuration tool (preferred for DietPi)
             if [ -f "/boot/dietpi/func/dietpi-set_hardware" ]; then
