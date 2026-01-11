@@ -154,13 +154,13 @@ if [ -f "config/zero2.conf" ]; then
             echo "  Installing I2C tools and Python libraries (I2C was just enabled)..."
             I2C_PACKAGES_TO_INSTALL=()
 
-            # Check for i2c-tools (more robust check)
-            if ! dpkg -l 2>/dev/null | grep -qE "^ii[[:space:]]+i2c-tools[[:space:]]"; then
+            # Check for i2c-tools using dpkg-query (more reliable)
+            if ! dpkg-query -W -f='${Status}' i2c-tools 2>/dev/null | grep -q "install ok installed"; then
                 I2C_PACKAGES_TO_INSTALL+=("i2c-tools")
             fi
 
-            # Check for python3-smbus (more robust check)
-            if ! dpkg -l 2>/dev/null | grep -qE "^ii[[:space:]]+python3-smbus[[:space:]]"; then
+            # Check for python3-smbus using dpkg-query (more reliable)
+            if ! dpkg-query -W -f='${Status}' python3-smbus 2>/dev/null | grep -q "install ok installed"; then
                 I2C_PACKAGES_TO_INSTALL+=("python3-smbus")
             fi
 
@@ -176,13 +176,13 @@ if [ -f "config/zero2.conf" ]; then
             # Only install if actually missing (no message if already installed)
             I2C_PACKAGES_TO_INSTALL=()
 
-            # Check for i2c-tools (more robust check)
-            if ! dpkg -l 2>/dev/null | grep -qE "^ii[[:space:]]+i2c-tools[[:space:]]"; then
+            # Check for i2c-tools using dpkg-query (more reliable)
+            if ! dpkg-query -W -f='${Status}' i2c-tools 2>/dev/null | grep -q "install ok installed"; then
                 I2C_PACKAGES_TO_INSTALL+=("i2c-tools")
             fi
 
-            # Check for python3-smbus (more robust check)
-            if ! dpkg -l 2>/dev/null | grep -qE "^ii[[:space:]]+python3-smbus[[:space:]]"; then
+            # Check for python3-smbus using dpkg-query (more reliable)
+            if ! dpkg-query -W -f='${Status}' python3-smbus 2>/dev/null | grep -q "install ok installed"; then
                 I2C_PACKAGES_TO_INSTALL+=("python3-smbus")
             fi
 
