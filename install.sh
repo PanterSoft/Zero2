@@ -42,16 +42,21 @@ fi
 # 1. Update System & Install Dependencies
 echo "Installing system dependencies..."
 apt-get update
-apt-get install -y \
-    python3-pip \
-    python3-venv \
-    python3-dev \
-    bluez \
-    bluez-tools \
-    network-manager \
-    i2c-tools \
-    libopenjp2-7 \
-    libtiff5
+
+# Check which packages need to be installed
+PACKAGES_TO_INSTALL=()
+for pkg in python3-pip python3-venv python3-dev bluez bluez-tools network-manager i2c-tools libopenjp2-7 libtiff6; do
+    if ! dpkg -l | grep -q "^ii  $pkg"; then
+        PACKAGES_TO_INSTALL+=("$pkg")
+    fi
+done
+
+if [ ${#PACKAGES_TO_INSTALL[@]} -gt 0 ]; then
+    echo "Installing missing packages: ${PACKAGES_TO_INSTALL[*]}"
+    apt-get install -y "${PACKAGES_TO_INSTALL[@]}"
+else
+    echo "All system dependencies are already installed."
+fi
 
 # 2. Setup USB OTG (Ethernet Gadget)
 if [ "$ENABLE_USB_OTG" = true ]; then
