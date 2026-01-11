@@ -132,6 +132,81 @@ if ! grep -q "gpu_mem=" /boot/config.txt; then
     echo "gpu_mem=16" >> /boot/config.txt
 fi
 
+# 6.5. Create Centralized Config File
+echo "Creating centralized configuration file..."
+mkdir -p "$INSTALL_DIR/config"
+cat > "$INSTALL_DIR/config/zero2.conf" <<EOF
+# Zero2 Controller Configuration File
+# This file contains all configuration options for the Zero2 Controller system
+# Edit this file and restart the service to apply changes
+
+# ==============================================================================
+# Feature Flags
+# ==============================================================================
+ENABLE_LOW_BAT=$ENABLE_LOW_BAT
+ENABLE_DISPLAY=$ENABLE_DISPLAY
+ENABLE_SSH_BT=$ENABLE_SSH_BT
+ENABLE_USB_OTG=$ENABLE_USB_OTG
+ENABLE_WIFI_HOTSPOT=$ENABLE_WIFI_HOTSPOT
+
+# ==============================================================================
+# Power Management Settings
+# ==============================================================================
+# GPIO pin number for low battery detection
+POWER_GPIO_PIN=25
+
+# Seconds low battery signal must persist before shutdown
+POWER_THRESHOLD=30
+
+# Seconds to warn user before shutdown (must be <= POWER_THRESHOLD)
+POWER_WARNING_TIME=30
+
+# Send wall messages to all terminals when low battery detected
+POWER_NOTIFY_TERMINALS=true
+
+# ==============================================================================
+# Display Settings
+# ==============================================================================
+# Seconds between display updates
+DISPLAY_UPDATE_INTERVAL=2
+
+# ==============================================================================
+# Network Settings
+# ==============================================================================
+# IP address for Bluetooth interface
+BT_IP=10.10.10.1
+
+# IP address for USB Gadget interface
+USB_IP=10.10.20.1
+
+# ==============================================================================
+# Logging Settings
+# ==============================================================================
+# Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+LOG_LEVEL=INFO
+
+# Log file path
+LOG_FILE=/var/log/zero2-controller.log
+
+# Maximum log file size in bytes (10 MB)
+LOG_MAX_BYTES=10485760
+
+# Number of backup log files to keep
+LOG_BACKUP_COUNT=5
+EOF
+chmod 644 "$INSTALL_DIR/config/zero2.conf"
+
+# Keep old config file for backward compatibility (if it exists)
+if [ -f "$INSTALL_DIR/config/enabled_features.conf" ]; then
+    echo "Note: Old config file enabled_features.conf exists but zero2.conf takes precedence"
+fi
+
+# 6.6. Setup Log Directory
+echo "Setting up log directory..."
+mkdir -p /var/log
+touch /var/log/zero2-controller.log
+chmod 644 /var/log/zero2-controller.log
+
 # 7. Install Systemd Services
 echo "Installing Systemd Services..."
 cp systemd/zero2-controller.service /etc/systemd/system/
