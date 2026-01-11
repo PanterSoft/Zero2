@@ -513,23 +513,51 @@ class DisplayManager:
             self.disp.image(self.image)
             self.disp.show()
 
+    def _get_interface_ip(self, interface):
+        """Get IP address for a specific network interface."""
+        try:
+            cmd = f"ip addr show {interface} 2>/dev/null | grep 'inet ' | awk '{{print $2}}' | cut -d'/' -f1"
+            result = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
+            if result:
+                return result
+        except:
+            pass
+        return None
+
+    def _is_interface_connected(self, interface):
+        """Check if network interface is connected and has IP."""
+        try:
+            # Check if interface exists and is up
+            result = subprocess.run(
+                ['ip', 'link', 'show', interface],
+                capture_output=True,
+                text=True,
+                timeout=1
+            )
+            if result.returncode == 0 and 'state UP' in result.stdout:
+                # Check if it has an IP address
+                ip = self._get_interface_ip(interface)
+                return ip is not None
+        except:
+            pass
+        return False
+
     def _draw_dashboard(self):
         """Draw compact dashboard with more information."""
         y_offset = self.content_start_y
         line_height = self.layout.font_char_height + self.layout.line_spacing
 
         # Available width: 128px, leave 2px margin on each side = 124px usable
-        # Split into two columns: left 60px, right 64px (with 2px gap)
         left_col_x = 2
-        right_col_x = 64
-        left_col_width = 60
-        right_col_width = 62
+        right_col_x = 70  # Moved further right to prevent clash
+        left_col_width = 66  # Increased for IP text
+        right_col_width = 56  # Reduced for CPU
 
         # Get system info
         try:
-            # IP addresses (compact)
-            cmd = "hostname -I | awk '{print $1}'"
-            IP = subprocess.check_output(cmd, shell=True).decode("utf-8").strip() or "N/A"
+            # Get WiFi and Ethernet IPs separately
+            wlan_ip = self._get_interface_ip('wlan0')
+            eth_ip = self._get_interface_ip('eth0')
 
             # CPU load (compact)
             cmd = "top -bn1 | grep load | awk '{printf \"%.2f\", $(NF-2)}'"
@@ -545,7 +573,8 @@ class DisplayManager:
 
         except Exception as e:
             logger.warning(f"Failed to get system info: {e}")
-            IP = "N/A"
+            wlan_ip = None
+            eth_ip = None
             CPU_load = "0.00"
             MemUsage = "N/A"
             DiskUsage = "N/A"
@@ -560,19 +589,34 @@ class DisplayManager:
                     self.network_stats_cache[f"{interface}_usage"] = stats
             self.network_stats_cache_time = current_time
 
-        # Draw compact dashboard (4 lines of info) using layout manager
+        # Draw compact dashboard using layout manager
         y = y_offset
 
-        # Line 1: IP (left) and CPU (right)
-        ip_text = f"IP:{IP[:10]}"  # Max 10 chars
-        cpu_text = f"CPU:{CPU_load[:5]}"  # Max 5 chars
+        # Line 1: Combined WiFi/Ethernet IP (left) and CPU (right)
+        # Build IP text: show WiFi and Ethernet if both available
+        ip_parts = []
+        if wlan_ip:
+            ip_parts.append(f"W:{wlan_ip[:9]}")  # Max 9 chars for WiFi IP
+        if eth_ip:
+            ip_parts.append(f"E:{eth_ip[:9]}")  # Max 9 chars for Ethernet IP
+
+        if not ip_parts:
+            ip_text = "IP:N/A"
+        else:
+            ip_text = " ".join(ip_parts)
+
+        # Truncate IP text to fit left column
+        max_ip_chars = left_col_width // self.layout.font_char_width
+        ip_text = ip_text[:max_ip_chars]
+
+        cpu_text = f"CPU:{CPU_load[:4]}"  # Max 4 chars for CPU load
 
         # Reserve and draw IP text
         ip_region = self.layout.reserve_text(left_col_x, y, ip_text, max_width=left_col_width, name="ip")
         if ip_region:
             self.draw.text((left_col_x, y), ip_text, font=self.font, fill=255)
 
-        # Reserve and draw CPU text
+        # Reserve and draw CPU text (ensure no overlap)
         cpu_region = self.layout.reserve_text(right_col_x, y, cpu_text, max_width=right_col_width, name="cpu")
         if cpu_region:
             self.draw.text((right_col_x, y), cpu_text, font=self.font, fill=255)
@@ -595,48 +639,47 @@ class DisplayManager:
 
         y += line_height
 
-        # Line 3: WiFi usage (full width, truncated)
-        wlan_stats = self.network_stats_cache.get('wlan0_usage')
-        if wlan_stats:
-            rx_rate = self._format_bytes(wlan_stats['rx'])
-            tx_rate = self._format_bytes(wlan_stats['tx'])
-            wifi_text = f"WiFi:↓{rx_rate[:6]}/s ↑{tx_rate[:6]}/s"
-        else:
-            wifi_text = "WiFi: N/A"
-
-        # Truncate to fit available width
-        max_wifi_chars = (self.width - left_col_x - 2) // self.layout.font_char_width
-        wifi_text = wifi_text[:max_wifi_chars]
-
-        wifi_region = self.layout.reserve_text(left_col_x, y, wifi_text, max_width=self.width - left_col_x - 2, name="wifi")
-        if wifi_region:
-            self.draw.text((left_col_x, y), wifi_text, font=self.font, fill=255)
-
-        y += line_height
-
-        # Line 4: Ethernet/USB usage (full width, truncated)
-        eth_stats = self.network_stats_cache.get('eth0_usage')
-        if eth_stats:
-            rx_rate = self._format_bytes(eth_stats['rx'])
-            tx_rate = self._format_bytes(eth_stats['tx'])
-            eth_text = f"Eth:↓{rx_rate[:6]}/s ↑{tx_rate[:6]}/s"
-        else:
-            # Show USB0 if eth0 not available
-            usb_stats = self.network_stats_cache.get('usb0_usage')
-            if usb_stats:
-                rx_rate = self._format_bytes(usb_stats['rx'])
-                tx_rate = self._format_bytes(usb_stats['tx'])
-                eth_text = f"USB:↓{rx_rate[:6]}/s ↑{tx_rate[:6]}/s"
+        # Line 3: WiFi usage (only if WiFi is connected)
+        wlan_connected = self._is_interface_connected('wlan0')
+        if wlan_connected:
+            wlan_stats = self.network_stats_cache.get('wlan0_usage')
+            if wlan_stats:
+                rx_rate = self._format_bytes(wlan_stats['rx'])
+                tx_rate = self._format_bytes(wlan_stats['tx'])
+                # Shorter format to prevent overlap - use d/u instead of arrows
+                wifi_text = f"WiFi:d{rx_rate[:4]}/s u{tx_rate[:4]}/s"
             else:
-                eth_text = "Eth: N/A"
+                wifi_text = "WiFi: connected"
 
-        # Truncate to fit available width
-        max_eth_chars = (self.width - left_col_x - 2) // self.layout.font_char_width
-        eth_text = eth_text[:max_eth_chars]
+            # Truncate to fit available width
+            max_wifi_width = self.width - left_col_x - 2
+            max_wifi_chars = max_wifi_width // self.layout.font_char_width
+            wifi_text = wifi_text[:max_wifi_chars]
 
-        eth_region = self.layout.reserve_text(left_col_x, y, eth_text, max_width=self.width - left_col_x - 2, name="eth")
-        if eth_region:
-            self.draw.text((left_col_x, y), eth_text, font=self.font, fill=255)
+            wifi_region = self.layout.reserve_text(left_col_x, y, wifi_text, max_width=max_wifi_width, name="wifi")
+            if wifi_region:
+                self.draw.text((left_col_x, y), wifi_text, font=self.font, fill=255)
+            y += line_height
+
+        # Line 4: Ethernet usage (only if Ethernet is connected, skip if not)
+        eth_connected = self._is_interface_connected('eth0')
+        if eth_connected:
+            eth_stats = self.network_stats_cache.get('eth0_usage')
+            if eth_stats:
+                rx_rate = self._format_bytes(eth_stats['rx'])
+                tx_rate = self._format_bytes(eth_stats['tx'])
+                eth_text = f"Eth:d{rx_rate[:4]}/s u{tx_rate[:4]}/s"
+            else:
+                eth_text = "Eth: connected"
+
+            # Truncate to fit available width
+            max_eth_width = self.width - left_col_x - 2
+            max_eth_chars = max_eth_width // self.layout.font_char_width
+            eth_text = eth_text[:max_eth_chars]
+
+            eth_region = self.layout.reserve_text(left_col_x, y, eth_text, max_width=max_eth_width, name="eth")
+            if eth_region:
+                self.draw.text((left_col_x, y), eth_text, font=self.font, fill=255)
 
     def _draw_network_menu(self):
         """Draw network information menu."""

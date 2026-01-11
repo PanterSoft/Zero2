@@ -35,7 +35,7 @@ class ButtonHandler:
         self.buttons = {}
         self.button_callbacks = {}
         self.last_press_time = {}
-        self.debounce_time = 0.05  # 50ms debounce (reduced for faster response)
+        self.debounce_time = 0.02  # 20ms debounce (reduced for faster response)
         self.callback_lock = threading.Lock()
         self.running = True
 

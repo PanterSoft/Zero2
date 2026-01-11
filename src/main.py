@@ -39,64 +39,64 @@ def main():
 
             # Menu navigation callbacks
             def button_up_pressed():
-                logger.info("Button UP pressed")
                 if display:
-                    display.menu.navigate_up()
-                    display.update_info()  # Immediate update
-                else:
-                    logger.warning("Display not available for button UP")
+                    try:
+                        display.menu.navigate_up()
+                        display.update_info()  # Immediate update
+                    except Exception as e:
+                        logger.error(f"Error in UP button: {e}", exc_info=True)
 
             def button_down_pressed():
-                logger.info("Button DOWN pressed")
                 if display:
-                    display.menu.navigate_down()
-                    display.update_info()  # Immediate update
-                else:
-                    logger.warning("Display not available for button DOWN")
+                    try:
+                        display.menu.navigate_down()
+                        display.update_info()  # Immediate update
+                    except Exception as e:
+                        logger.error(f"Error in DOWN button: {e}", exc_info=True)
 
             def button_left_pressed():
-                logger.info("Button LEFT pressed")
                 if display:
-                    display.menu.navigate_left()
-                    display.update_info()  # Immediate update
-                else:
-                    logger.warning("Display not available for button LEFT")
+                    try:
+                        display.menu.navigate_left()
+                        display.update_info()  # Immediate update
+                    except Exception as e:
+                        logger.error(f"Error in LEFT button: {e}", exc_info=True)
 
             def button_right_pressed():
-                logger.info("Button RIGHT pressed")
                 if display:
-                    display.menu.navigate_right()
-                    display.update_info()  # Immediate update
-                else:
-                    logger.warning("Display not available for button RIGHT")
+                    try:
+                        display.menu.navigate_right()
+                        display.update_info()  # Immediate update
+                    except Exception as e:
+                        logger.error(f"Error in RIGHT button: {e}", exc_info=True)
 
             def button_select_pressed():
-                logger.info("Button SELECT pressed")
                 if display:
-                    display.menu.select()
-                    display.update_info()  # Immediate update
-                else:
-                    logger.warning("Display not available for button SELECT")
+                    try:
+                        display.menu.select()
+                        display.update_info()  # Immediate update
+                    except Exception as e:
+                        logger.error(f"Error in SELECT button: {e}", exc_info=True)
 
             def button_a_pressed():
-                logger.info("Button A pressed")
                 if display:
-                    current_menu = display.menu.get_current_menu()
-                    if current_menu != MenuSystem.MENU_MAIN:
-                        display.menu.go_back()
-                    display.update_info()
-                else:
-                    logger.warning("Display not available for button A")
+                    try:
+                        current_menu = display.menu.get_current_menu()
+                        if current_menu != MenuSystem.MENU_MAIN:
+                            display.menu.go_back()
+                        display.update_info()
+                    except Exception as e:
+                        logger.error(f"Error in A button: {e}", exc_info=True)
 
             def button_b_pressed():
-                logger.info("Button B pressed")
                 if display:
-                    current_menu = display.menu.get_current_menu()
-                    if current_menu != MenuSystem.MENU_MAIN:
-                        display.menu.go_back()
-                    display.update_info()
-                else:
-                    logger.warning("Display not available for button B")
+                    try:
+                        current_menu = display.menu.get_current_menu()
+                        if current_menu != MenuSystem.MENU_MAIN:
+                            display.menu.go_back()
+                        display.update_info()
+                    except Exception as e:
+                        logger.error(f"Error in B button: {e}", exc_info=True)
 
             buttons.register_callback('UP', button_up_pressed)
             buttons.register_callback('DOWN', button_down_pressed)
@@ -131,26 +131,26 @@ def main():
     logger.info("Entering main loop")
     display_interval = config.get('DISPLAY_UPDATE_INTERVAL', 2)
     last_display_update = 0
-    button_check_interval = 0.05  # Check buttons every 50ms
+    button_check_interval = 0.01  # Check buttons every 10ms for faster response
     last_button_check = 0
 
     while True:
         try:
             current_time = time.time()
 
-            # Check buttons frequently but independently of display updates
+            # Check buttons very frequently for immediate response
             if buttons and (current_time - last_button_check) >= button_check_interval:
                 buttons.check_buttons()
                 last_button_check = current_time
 
             # Update display at configured interval (independent of button checks)
-            # Note: Warnings trigger immediate updates via show_warning()
+            # Note: Button callbacks trigger immediate updates via update_info()
             if display and (current_time - last_display_update) >= display_interval:
                 display.update_info()
                 last_display_update = current_time
 
-            # Small sleep to avoid busy-waiting
-            time.sleep(0.01)  # Reduced sleep for more responsive button checking
+            # Very small sleep to avoid busy-waiting while maintaining responsiveness
+            time.sleep(0.005)  # 5ms sleep for very responsive button checking
 
         except Exception as e:
             logger.error(f"Error in main loop: {e}", exc_info=True)
