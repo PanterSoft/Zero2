@@ -56,31 +56,76 @@ if [ -f "config/zero2.conf" ]; then
     if [ "$ENABLE_DISPLAY" = "true" ] || [ "$ENABLE_DISPLAY" = "1" ] || [ "$ENABLE_DISPLAY" = "yes" ] || [ "$ENABLE_DISPLAY" = "on" ]; then
         echo "Checking I2C configuration..."
 
-        # Check if I2C is enabled (handle with/without leading whitespace)
+        # Method 1: Use DietPi's internal hardware configuration tool (preferred for DietPi)
         I2C_ALREADY_ENABLED=false
         I2C_JUST_ENABLED=false
 
-        if grep -qE "^[[:space:]]*dtparam=i2c_arm=on" /boot/config.txt; then
-            I2C_ALREADY_ENABLED=true
-            echo "  I2C already enabled in /boot/config.txt"
-        elif grep -qE "^[[:space:]]*dtparam=i2c_arm=off" /boot/config.txt; then
-            sed -i 's/^[[:space:]]*dtparam=i2c_arm=off/dtparam=i2c_arm=on/' /boot/config.txt
-            I2C_JUST_ENABLED=true
-            I2C_CHANGED=true
-            echo "  Changed dtparam=i2c_arm=off to dtparam=i2c_arm=on"
-        elif grep -qE "^[[:space:]]*#.*dtparam=i2c_arm=" /boot/config.txt; then
-            # I2C line is commented out (with optional whitespace before #), uncomment and enable
-            # Handle both "#dtparam=i2c_arm=off" and "# dtparam=i2c_arm=off" patterns
-            sed -i -E 's/^([[:space:]]*)#([[:space:]]*)dtparam=i2c_arm=.*/\1dtparam=i2c_arm=on/' /boot/config.txt
-            I2C_JUST_ENABLED=true
-            I2C_CHANGED=true
-            echo "  Uncommented and enabled I2C in /boot/config.txt"
-        else
-            # I2C is not enabled yet, add it
-            echo "dtparam=i2c_arm=on" >> /boot/config.txt
-            I2C_JUST_ENABLED=true
-            I2C_CHANGED=true
-            echo "  Added dtparam=i2c_arm=on to /boot/config.txt"
+        if [ -f "/boot/dietpi/func/dietpi-set_hardware" ]; then
+            echo "  Using DietPi's dietpi-set_hardware tool..."
+            # Check if I2C is already enabled by checking config.txt
+            if grep -qE "^[[:space:]]*dtparam=i2c_arm=on" /boot/config.txt; then
+                I2C_ALREADY_ENABLED=true
+                echo "  I2C already enabled in /boot/config.txt"
+            else
+                # Use DietPi's tool to enable I2C
+                if /boot/dietpi/func/dietpi-set_hardware i2c enable >/dev/null 2>&1; then
+                    I2C_JUST_ENABLED=true
+                    I2C_CHANGED=true
+                    echo "  Enabled I2C via dietpi-set_hardware"
+                else
+                    echo "  dietpi-set_hardware failed, using direct config.txt method"
+                fi
+            fi
+        fi
+
+        # Method 2: Direct /boot/config.txt modification (fallback or if DietPi tool not available)
+        if [ "$I2C_ALREADY_ENABLED" = false ] && [ "$I2C_JUST_ENABLED" = false ]; then
+            if grep -qE "^[[:space:]]*dtparam=i2c_arm=on" /boot/config.txt; then
+                I2C_ALREADY_ENABLED=true
+                echo "  I2C already enabled in /boot/config.txt"
+            elif grep -qE "^[[:space:]]*dtparam=i2c_arm=off" /boot/config.txt; then
+                sed -i 's/^[[:space:]]*dtparam=i2c_arm=off/dtparam=i2c_arm=on/' /boot/config.txt
+                I2C_JUST_ENABLED=true
+                I2C_CHANGED=true
+                echo "  Changed dtparam=i2c_arm=off to dtparam=i2c_arm=on"
+            elif grep -qE "^[[:space:]]*#.*dtparam=i2c_arm=" /boot/config.txt; then
+                # I2C line is commented out (with optional whitespace before #), uncomment and enable
+                # Handle both "#dtparam=i2c_arm=off" and "# dtparam=i2c_arm=off" patterns
+                sed -i -E 's/^([[:space:]]*)#([[:space:]]*)dtparam=i2c_arm=.*/\1dtparam=i2c_arm=on/' /boot/config.txt
+                I2C_JUST_ENABLED=true
+                I2C_CHANGED=true
+                echo "  Uncommented and enabled I2C in /boot/config.txt"
+            else
+                # I2C is not enabled yet, add it
+                echo "dtparam=i2c_arm=on" >> /boot/config.txt
+                I2C_JUST_ENABLED=true
+                I2C_CHANGED=true
+                echo "  Added dtparam=i2c_arm=on to /boot/config.txt"
+            fi
+        fi
+
+        # Install I2C tools and Python libraries (needed for I2C functionality)
+        if [ "$I2C_JUST_ENABLED" = true ] || [ "$I2C_ALREADY_ENABLED" = true ]; then
+            echo "  Installing I2C tools and Python libraries..."
+            I2C_PACKAGES_TO_INSTALL=()
+
+            # Check for i2c-tools
+            if ! dpkg -l | grep -q "^ii  i2c-tools[[:space:]]"; then
+                I2C_PACKAGES_TO_INSTALL+=("i2c-tools")
+            fi
+
+            # Check for python3-smbus
+            if ! dpkg -l | grep -q "^ii  python3-smbus[[:space:]]"; then
+                I2C_PACKAGES_TO_INSTALL+=("python3-smbus")
+            fi
+
+            if [ ${#I2C_PACKAGES_TO_INSTALL[@]} -gt 0 ]; then
+                apt-get update -qq
+                apt-get install -y "${I2C_PACKAGES_TO_INSTALL[@]}"
+                echo "  Installed: ${I2C_PACKAGES_TO_INSTALL[*]}"
+            else
+                echo "  I2C tools already installed"
+            fi
         fi
 
         # Only show warnings if I2C was just enabled
